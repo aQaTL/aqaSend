@@ -1,0 +1,2 @@
+[workspace]
+members = ["aqa_send"]

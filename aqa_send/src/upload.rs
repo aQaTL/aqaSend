@@ -8,7 +8,6 @@ use thiserror::Error;
 use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 
-use crate::upload::UploadError::FileCreate;
 use crate::{DB_DIR, DIRS_BY_DOWNLOAD_COUNT};
 
 #[derive(Debug, Error)]
@@ -21,24 +20,36 @@ pub enum UploadError {
 	FileCreate(std::io::Error),
 	#[error("Io error occurred when writing uploaded file")]
 	FileWrite(std::io::Error),
+	#[error("Upload requires `multipart/form-data` Content-Type")]
+	InvalidContentType,
+	#[error("Multipart/form-data upload must define a boundary")]
+	BoundaryExpected,
 }
 
 pub async fn upload(req: Request<Body>) -> Result<Response<Body>, UploadError> {
+	use UploadError::{BoundaryExpected, FileCreate, FileWrite, InvalidContentType};
+
 	let (parts, body) = req.into_parts();
 
 	// TODO(aqatl): separate error handling for service and handler errors
-	let content_type = parts.headers.get("content-type").unwrap().to_str().unwrap();
+	let content_type = parts
+		.headers
+		.get("content-type")
+		.ok_or(InvalidContentType)?
+		.to_str()
+		.map_err(|_| InvalidContentType)?;
 
-	let boundary = match content_type.strip_prefix("multipart/form-data; ") {
-		Some(boundary) => boundary.strip_prefix("boundary=").unwrap(),
-		None => panic!("only multipart/form-data content type is supported"),
-	};
+	let boundary = content_type
+		.strip_prefix("multipart/form-data; ")
+		.ok_or(BoundaryExpected)?
+		.strip_prefix("boundary=")
+		.ok_or(BoundaryExpected)?;
 	let boundary = format!("--{}", boundary);
 	debug!("Boundary: {}", boundary);
 
 	let mut multipart = Multipart {
-		boundary,
 		body,
+		boundary,
 		buf: BytesMut::default(),
 	};
 
@@ -61,9 +72,7 @@ pub async fn upload(req: Request<Body>) -> Result<Response<Body>, UploadError> {
 
 		while let Some(chunk) = multipart.read_data().await {
 			let chunk = chunk?;
-			file.write_all(&chunk)
-				.await
-				.map_err(UploadError::FileWrite)?;
+			file.write_all(&chunk).await.map_err(FileWrite)?;
 		}
 		uploaded_files_info.push((upload_uuid, header.file_name));
 	}
@@ -120,6 +129,8 @@ pub enum MultipartError {
 
 impl Multipart {
 	pub async fn read_header(&mut self) -> Result<MultipartHeader, MultipartError> {
+		use MultipartError::*;
+
 		let boundary_len_with_crlf = self.boundary.len() + 2;
 		while self.buf.len() < boundary_len_with_crlf * 2 {
 			let chunk = match self.body.next().await {
@@ -131,10 +142,10 @@ impl Multipart {
 		}
 
 		if self.buf.len() < boundary_len_with_crlf * 2 {
-			return Err(MultipartError::NotEnoughData);
+			return Err(NotEnoughData);
 		}
 		if &self.buf[..self.boundary.len()] != self.boundary.as_bytes() {
-			return Err(MultipartError::BoundaryExpected);
+			return Err(BoundaryExpected);
 		}
 
 		self.buf.advance(self.boundary.len() + 2); // +2 bytes to also skip CR LF
@@ -154,7 +165,7 @@ impl Multipart {
 				None => match self.body.next().await {
 					Some(Ok(buf)) => self.buf.put_slice(&buf),
 					Some(Err(err)) => return Err(err.into()),
-					None => return Err(MultipartError::NotEnoughData),
+					None => return Err(NotEnoughData),
 				},
 			}
 		};
@@ -164,13 +175,12 @@ impl Multipart {
 		let mut content_type = None;
 
 		let header_bytes: &[u8] = header_bytes.as_ref();
-		let header: &str =
-			std::str::from_utf8(header_bytes).map_err(MultipartError::HeaderUtf8Error)?;
+		let header: &str = std::str::from_utf8(header_bytes).map_err(HeaderUtf8Error)?;
 		for line in header.split("\r\n").filter(|line| !line.is_empty()) {
 			let (key, value) = {
 				let mut split = line.split(": ");
-				let key = split.next().ok_or(MultipartError::MalformedForm)?;
-				let value = split.next().ok_or(MultipartError::MalformedForm)?;
+				let key = split.next().ok_or(MalformedForm)?;
+				let value = split.next().ok_or(MalformedForm)?;
 				(key, value)
 			};
 
@@ -179,17 +189,13 @@ impl Multipart {
 					let mut content_disposition = value.split("; ");
 					match content_disposition.next() {
 						Some("form-data") => (),
-						_ => return Err(MultipartError::ContentDispositionInvalidType),
+						_ => return Err(ContentDispositionInvalidType),
 					}
 					for cd in content_disposition {
 						let (key, value) = {
 							let mut split = cd.split('=');
-							let key = split
-								.next()
-								.ok_or(MultipartError::ContentDispositionInvalidFormat)?;
-							let value = split
-								.next()
-								.ok_or(MultipartError::ContentDispositionInvalidFormat)?;
+							let key = split.next().ok_or(ContentDispositionInvalidFormat)?;
+							let value = split.next().ok_or(ContentDispositionInvalidFormat)?;
 							(key, value)
 						};
 						match key {
@@ -209,8 +215,8 @@ impl Multipart {
 		self.buf.advance(2);
 
 		Ok(MultipartHeader {
-			name: name.ok_or(MultipartError::NameNotFound)?,
-			file_name: file_name.ok_or(MultipartError::FileNameNotFound)?,
+			name: name.ok_or(NameNotFound)?,
+			file_name: file_name.ok_or(FileNameNotFound)?,
 			content_type,
 		})
 	}

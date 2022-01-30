@@ -1,16 +1,21 @@
+extern crate core;
+
 use std::error::Error;
-use std::future::{ready, Ready};
+use std::future::{ready, Future, Ready};
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use hyper::server::conn::AddrStream;
 use hyper::service::Service;
 use hyper::Server;
+use hyper::{Body, Method, Request, Response, StatusCode};
 use log::*;
 use thiserror::Error;
 
 mod logger;
+mod upload;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -61,8 +66,8 @@ fn init_app_directory_structure() -> Result<(), InitAppFolderStructureError> {
 struct MakeService;
 
 impl Service<&AddrStream> for MakeService {
-	type Response = aqa_service::AqaService;
-	type Error = aqa_service::AqaServiceError;
+	type Response = AqaService;
+	type Error = AqaServiceError;
 	type Future = Ready<Result<Self::Response, Self::Error>>;
 
 	fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -70,62 +75,72 @@ impl Service<&AddrStream> for MakeService {
 	}
 
 	fn call(&mut self, _req: &AddrStream) -> Self::Future {
-		ready(Ok(aqa_service::AqaService))
+		ready(Ok(AqaService))
 	}
 }
 
-mod aqa_service {
-	use std::future::{ready, Future};
-	use std::pin::Pin;
-	use std::task::{Context, Poll};
+pub struct AqaService;
 
-	use hyper::service::Service;
-	use hyper::{Body, Method, Request, Response, StatusCode};
-	use thiserror::Error;
+#[derive(Debug, Error)]
+pub enum AqaServiceError {
+	#[error(transparent)]
+	Hyper(#[from] hyper::Error),
+	#[error(transparent)]
+	Http(#[from] hyper::http::Error),
+	#[error(transparent)]
+	Io(#[from] std::io::Error),
+}
 
-	use crate::split_uri_path;
+impl Service<Request<Body>> for AqaService {
+	type Response = Response<Body>;
+	type Error = AqaServiceError;
+	#[allow(clippy::type_complexity)]
+	type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
-	pub struct AqaService;
-
-	#[derive(Debug, Error)]
-	pub enum AqaServiceError {
-		#[error(transparent)]
-		Hyper(#[from] hyper::Error),
-		#[error(transparent)]
-		Http(#[from] hyper::http::Error),
+	fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+		Poll::Ready(Ok(()))
 	}
 
-	impl Service<Request<Body>> for AqaService {
-		type Response = Response<Body>;
-		type Error = AqaServiceError;
-		#[allow(clippy::type_complexity)]
-		type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-		fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-			Poll::Ready(Ok(()))
-		}
-
-		fn call(&mut self, req: Request<Body>) -> Self::Future {
-			println!("{:?}", req);
-			let uri_path = req.uri().path().to_owned();
-			let mut path = split_uri_path(&uri_path);
-			let method = req.method().clone();
-			match (method, path.next()) {
-				(Method::GET, Some("api")) => Box::pin(aqa_service_request(req)),
-				_ => Box::pin(ready(Ok(Response::builder()
-					.status(StatusCode::NOT_FOUND)
-					.body("Not found\n".into())
-					.unwrap()))),
-			}
+	fn call(&mut self, req: Request<Body>) -> Self::Future {
+		debug!("{:?}", req);
+		let uri_path = req.uri().path().to_owned();
+		let path: Vec<&str> = split_uri_path(&uri_path).collect();
+		let method = req.method().clone();
+		match (method, path.as_slice()) {
+			(Method::GET, ["api"]) => Box::pin(hello(req)),
+			(Method::POST, ["api", "upload"]) => Box::pin(handle_response(upload::upload(req))),
+			_ => Box::pin(ready(Ok(Response::builder()
+				.status(StatusCode::NOT_FOUND)
+				.body("Not found\n".into())
+				.unwrap()))),
 		}
 	}
+}
 
-	async fn aqa_service_request(_req: Request<Body>) -> Result<Response<Body>, AqaServiceError> {
-		let resp = Response::builder()
-			.status(StatusCode::OK)
-			.body("Hello from aqaSend\n".into())?;
-		Ok(resp)
+async fn handle_response<E: std::error::Error>(
+	resp: impl Future<Output = Result<Response<Body>, E>>,
+) -> Result<Response<Body>, AqaServiceError> {
+	match resp.await {
+		Ok(resp) => Ok(resp),
+		Err(err) => {
+			error!("{:?}", err);
+
+			let body = if cfg!(debug_assertions) {
+				Body::from(err.to_string())
+			} else {
+				Body::from("")
+			};
+			Ok(Response::builder()
+				.status(StatusCode::INTERNAL_SERVER_ERROR)
+				.body(body)?)
+		}
 	}
+}
+
+async fn hello(_req: Request<Body>) -> Result<Response<Body>, AqaServiceError> {
+	Ok(Response::builder()
+		.status(StatusCode::OK)
+		.body("Hello from aqaSend\n".into())?)
 }
 
 fn split_uri_path(path: &str) -> impl Iterator<Item = &str> {

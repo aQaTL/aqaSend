@@ -14,9 +14,8 @@
 </template>
 
 <script lang="ts">
-import {defineComponent} from "vue";
-
-const API_ENDPOINT = process.env.NODE_ENV === "production" ? "notsureyet" : "http://127.0.0.1:8000";
+import { defineComponent } from "vue";
+import { API_ENDPOINT } from "@/api";
 
 export default defineComponent({
   components: {},

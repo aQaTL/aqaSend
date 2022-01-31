@@ -9,7 +9,7 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 
 use crate::db_stuff::FileEntry;
-use crate::headers::{DownloadCount, Lifetime};
+use crate::headers::{DownloadCount, Lifetime, DOWNLOAD_COUNT, LIFETIME, PASSWORD, VISIBILITY};
 use hyper::http::HeaderValue;
 use hyper::service::{make_service_fn, Service};
 use hyper::Server;
@@ -223,6 +223,7 @@ impl Service<Request<Body>> for AqaService {
 				upload::upload(req, Arc::clone(&self.db)),
 				origin_header,
 			)),
+			(Method::OPTIONS, ["api", "upload"]) => Box::pin(preflight_request(req)),
 			(Method::GET, ["api", "download", uuid]) => Box::pin(handle_response(
 				download::download(uuid.to_string(), req, Arc::clone(&self.db)),
 				origin_header,
@@ -263,6 +264,25 @@ async fn handle_response<E: std::error::Error>(
 				.body(body)?)
 		}
 	}
+}
+
+async fn preflight_request(req: Request<Body>) -> Result<Response<Body>, AqaServiceError> {
+	Ok(Response::builder()
+		.status(StatusCode::NO_CONTENT)
+		.header(
+			"Access-Control-Allow-Origin",
+			req.headers().get("origin").unwrap(),
+		)
+		.header("Access-Control-Allow-Methods", "OPTIONS, POST")
+		.header(
+			"Access-Control-Allow-Headers",
+			format!(
+				"Content-Type, {}, {}, {}, {}",
+				VISIBILITY, DOWNLOAD_COUNT, PASSWORD, LIFETIME
+			),
+		)
+		.header("Access-Control-Max-Age", (60 * 60).to_string())
+		.body(Body::from(""))?)
 }
 
 async fn hello(_req: Request<Body>) -> Result<Response<Body>, AqaServiceError> {

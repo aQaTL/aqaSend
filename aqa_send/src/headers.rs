@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::headers::HeaderError::DownloadCountParse;
+use crate::headers::Lifetime::Duration;
 
 pub const VISIBILITY: &str = "aqa-visibility";
 pub const DOWNLOAD_COUNT: &str = "aqa-download-count";
@@ -29,9 +30,16 @@ pub enum HeaderError {
 	DownloadCountInvalidCount,
 }
 
+#[derive(Serialize, Deserialize)]
 pub enum Visibility {
 	Public,
 	Private,
+}
+
+impl Default for Visibility {
+	fn default() -> Self {
+		Visibility::Public
+	}
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize)]
@@ -40,14 +48,34 @@ pub enum DownloadCount {
 	Count(u64),
 }
 
+impl Default for DownloadCount {
+	fn default() -> Self {
+		DownloadCount::Count(1)
+	}
+}
+
+#[derive(Serialize, Deserialize)]
 pub enum Password {
 	None,
 	Some(String),
 }
 
+impl Default for Password {
+	fn default() -> Self {
+		Password::None
+	}
+}
+
+#[derive(Serialize, Deserialize)]
 pub enum Lifetime {
 	Infinite,
 	Duration(std::time::Duration),
+}
+
+impl Default for Lifetime {
+	fn default() -> Self {
+		Duration(std::time::Duration::from_secs(60 * 60)) // 1 hour
+	}
 }
 
 impl TryFrom<Option<&HeaderValue>> for DownloadCount {

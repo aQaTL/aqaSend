@@ -1,7 +1,8 @@
-use bytes::{Buf, BufMut, BytesMut};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::SystemTime;
 
+use bytes::{Buf, BufMut, BytesMut};
 use futures::StreamExt;
 use hyper::{Body, Request, Response, StatusCode};
 use log::*;
@@ -11,7 +12,7 @@ use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 
 use crate::db_stuff::FileEntry;
-use crate::headers::{DownloadCount, HeaderError, DOWNLOAD_COUNT};
+use crate::headers::{DownloadCount, HeaderError, Lifetime, Password, Visibility, DOWNLOAD_COUNT};
 use crate::DB_DIR;
 
 #[derive(Debug, Error)]
@@ -86,12 +87,19 @@ pub async fn upload(req: Request<Body>, db: Arc<DB>) -> Result<Response<Body>, U
 		let mut file = tokio::fs::File::create(path).await.map_err(FileCreate)?;
 
 		let file_entry = FileEntry {
-			download_count_type: download_count,
-			download_count: 0,
 			filename: header.file_name,
 			content_type: header
 				.content_type
 				.unwrap_or_else(|| String::from("application/octet-stream")),
+
+			download_count_type: download_count,
+			download_count: 0,
+
+			visibility: Visibility::default(),
+			password: Password::default(),
+
+			lifetime: Lifetime::default(),
+			upload_date: SystemTime::now(),
 		};
 		db.put(&upload_uuid.as_bytes(), bincode::serialize(&file_entry)?)?;
 

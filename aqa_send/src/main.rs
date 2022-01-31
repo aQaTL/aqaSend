@@ -1,3 +1,4 @@
+use futures::future::join_all;
 use std::error::Error;
 use std::future::{ready, Future};
 use std::net::SocketAddr;
@@ -37,11 +38,37 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 	tokio::spawn(cleanup_task(Arc::clone(&db)));
 
-	let server = Server::bind(&addr).serve(make_service_fn(move |_addr_stream| {
-		let db = Arc::clone(&db);
-		ready(Result::<AqaService, AqaServiceError>::Ok(AqaService { db }))
-	}));
-	server.await?;
+	#[cfg(not(target_os = "linux"))]
+	let servers = vec![Server::bind(&addr)];
+	#[cfg(target_os = "linux")]
+	let servers = {
+		match systemd_socket_activation::systemd_socket_activation() {
+			Ok(sockets) if !sockets.is_empty() => {
+				let mut servers = Vec::with_capacity(sockets.len());
+				for socket in sockets {
+					servers.push(Server::from_tcp(socket)?);
+				}
+				servers
+			}
+			Ok(_) => {
+				vec![Server::bind(&addr)]
+			}
+			Err(err) => {
+				error!("Systemd socket activation failed: {:?}", err);
+				vec![Server::bind(&addr)]
+			}
+		}
+	};
+
+	join_all(servers.into_iter().map(|server| {
+		server.serve(make_service_fn(|_addr_stream| {
+			let db = Arc::clone(&db);
+			ready(Result::<AqaService, AqaServiceError>::Ok(AqaService { db }))
+		}))
+	}))
+	.await
+	.into_iter()
+	.try_for_each(|result| result)?;
 
 	Ok(())
 }
@@ -123,11 +150,7 @@ async fn cleanup_task(db: Arc<rocksdb::DB>) {
 				if file_entry.download_count >= max_count {
 					match db.delete(&key) {
 						Ok(_) => (),
-						Err(err) => error!(
-							"DB error when deleting {}: {:?}",
-							uuid,
-							err
-						),
+						Err(err) => error!("DB error when deleting {}: {:?}", uuid, err),
 					}
 					let mut file_path = PathBuf::from(DB_DIR);
 					file_path.push(file_entry.download_count_type.to_string());
@@ -135,11 +158,7 @@ async fn cleanup_task(db: Arc<rocksdb::DB>) {
 
 					match tokio::fs::remove_file(file_path).await {
 						Ok(_) => deleted_files_count += 1,
-						Err(err) =>  error!(
-							"DB error when deleting {}: {:?}",
-							uuid,
-							err
-						),
+						Err(err) => error!("DB error when deleting {}: {:?}", uuid, err),
 					}
 					continue;
 				}
@@ -150,11 +169,7 @@ async fn cleanup_task(db: Arc<rocksdb::DB>) {
 					if elapsed > lifetime {
 						match db.delete(&key) {
 							Ok(_) => deleted_files_count += 1,
-							Err(err) => error!(
-								"DB error when deleting {}: {:?}",
-								uuid,
-								err
-							),
+							Err(err) => error!("DB error when deleting {}: {:?}", uuid, err),
 						}
 						//TODO(aqatl): remove lifetime bounded file from disk
 						continue;

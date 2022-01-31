@@ -14,6 +14,7 @@ dependencies = [
  "rocksdb",
  "serde",
  "serde_json",
+ "systemd-socket-activation",
  "thiserror",
  "tokio",
  "uuid",
@@ -583,6 +584,14 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-xid",
+]
+
+[[package]]
+name = "systemd-socket-activation"
+version = "0.1.0"
+source = "git+https://github.com/aQaTL/systemd-socket-activation.git?branch=aqatl/link-systemd#b4818f9d4095209f21bfbc576bf72e60b1972dc5"
+dependencies = [
+ "libloading",
 ]
 
 [[package]]

@@ -1,14 +1,18 @@
 use bytes::{Buf, BufMut, BytesMut};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use futures::StreamExt;
 use hyper::{Body, Request, Response, StatusCode};
 use log::*;
+use rocksdb::DB;
 use thiserror::Error;
 use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 
-use crate::{DB_DIR, DIRS_BY_DOWNLOAD_COUNT};
+use crate::db_stuff::FileEntry;
+use crate::headers::{DownloadCount, HeaderError, DOWNLOAD_COUNT};
+use crate::DB_DIR;
 
 #[derive(Debug, Error)]
 pub enum UploadError {
@@ -24,14 +28,19 @@ pub enum UploadError {
 	InvalidContentType,
 	#[error("Multipart/form-data upload must define a boundary")]
 	BoundaryExpected,
+	#[error(transparent)]
+	AqaHeader(#[from] HeaderError),
+	#[error(transparent)]
+	Db(#[from] rocksdb::Error),
+	#[error(transparent)]
+	DbSerialize(#[from] bincode::Error),
 }
 
-pub async fn upload(req: Request<Body>) -> Result<Response<Body>, UploadError> {
+pub async fn upload(req: Request<Body>, db: Arc<DB>) -> Result<Response<Body>, UploadError> {
 	use UploadError::{BoundaryExpected, FileCreate, FileWrite, InvalidContentType};
 
 	let (parts, body) = req.into_parts();
 
-	// TODO(aqatl): separate error handling for service and handler errors
 	let content_type = parts
 		.headers
 		.get("content-type")
@@ -46,6 +55,8 @@ pub async fn upload(req: Request<Body>) -> Result<Response<Body>, UploadError> {
 		.ok_or(BoundaryExpected)?;
 	let boundary = format!("--{}", boundary);
 	debug!("Boundary: {}", boundary);
+
+	let download_count: DownloadCount = parts.headers.get(DOWNLOAD_COUNT).try_into()?;
 
 	let mut multipart = Multipart {
 		body,
@@ -63,18 +74,29 @@ pub async fn upload(req: Request<Body>) -> Result<Response<Body>, UploadError> {
 		};
 		info!("Uploading {}", header.file_name);
 
-		let upload_uuid = Uuid::new_v4().to_string();
-		let path: PathBuf = [DB_DIR, DIRS_BY_DOWNLOAD_COUNT[0], &upload_uuid]
-			.into_iter()
-			.collect();
+		let upload_uuid = Uuid::new_v4();
+		let path: PathBuf = [
+			DB_DIR,
+			&download_count.to_string(),
+			&upload_uuid.to_string(),
+		]
+		.into_iter()
+		.collect();
 
 		let mut file = tokio::fs::File::create(path).await.map_err(FileCreate)?;
+
+		let file_entry = FileEntry {
+			download_count_type: download_count,
+			download_count: 0,
+			filename: header.file_name,
+		};
+		db.put(&upload_uuid.as_bytes(), bincode::serialize(&file_entry)?)?;
 
 		while let Some(chunk) = multipart.read_data().await {
 			let chunk = chunk?;
 			file.write_all(&chunk).await.map_err(FileWrite)?;
 		}
-		uploaded_files_info.push((upload_uuid, header.file_name));
+		uploaded_files_info.push((upload_uuid, file_entry));
 	}
 
 	Ok(Response::builder().status(StatusCode::OK).body(
@@ -82,9 +104,9 @@ pub async fn upload(req: Request<Body>) -> Result<Response<Body>, UploadError> {
 			"Hello from aqaSend upload.\n{}",
 			uploaded_files_info
 				.into_iter()
-				.map(|(uuid, filename)| format!(
+				.map(|(uuid, file_entry)| format!(
 					"Your file id: {}.\n\"{}\" uploaded successfully.\n",
-					uuid, filename
+					uuid, file_entry.filename,
 				))
 				.collect::<String>(),
 		)

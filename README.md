@@ -36,18 +36,24 @@ My clone of Firefox Send.
 
 # Messaging protocol
 
-I think JSON is a reasonable choice. The file data should be sent after the JSON.
+Data will be uploaded using the `multipart/form-data` encoding.
 
-Example request:
+Upload parameters will be specified in headers. To avoid conflicts, all of these headers have to 
+have an `aqa-` prefix.
 
-```
-POST /upload
-<SOME HTTP HEADERS>
-JSON_BODY_SIZE: number
-MUTLIPART_FILE_DATA_SIZE: number
-{
-	"json": "file metadata"
-}
-0xBITS0xAND0xBYTES
-```
+## Necessary headers
+
+- `aqa-visibility: [public|private]`
+- `aqa-download-count: [infinite|1|5|10|100]`
+- `aqa-password: [none|some(password)]`
+- `aqa-lifetime: [infinite|1 min|5 mins|1 hour|1 day|7 days|30 days]`
+
+For download count and lifetime, infinite values should only be available for registered users. 
+
+# Registration
+
+I don't want people to be able to register an account on my website without me knowing them.
+So, registration will work in an invitation-based system. 
+
+## Invitation based system
 

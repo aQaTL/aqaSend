@@ -6,7 +6,11 @@ static LOGGER: Logger = Logger;
 
 pub fn init() {
 	log::set_logger(&LOGGER).expect("Tried to set global logger twice");
-	log::set_max_level(LevelFilter::Debug);
+	if cfg!(debug_assertions) {
+		log::set_max_level(LevelFilter::Debug);
+	} else {
+		log::set_max_level(LevelFilter::Info);
+	}
 }
 
 impl log::Log for Logger {

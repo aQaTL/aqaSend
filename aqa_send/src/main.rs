@@ -1,19 +1,20 @@
-extern crate core;
-
 use std::error::Error;
-use std::future::{ready, Future, Ready};
+use std::future::{ready, Future};
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use hyper::server::conn::AddrStream;
-use hyper::service::Service;
+use hyper::service::{make_service_fn, Service};
 use hyper::Server;
 use hyper::{Body, Method, Request, Response, StatusCode};
 use log::*;
 use thiserror::Error;
 
+mod db_stuff;
+mod download;
+mod headers;
 mod logger;
 mod upload;
 
@@ -24,9 +25,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	let addr = SocketAddr::from(([127, 0, 0, 1], 8000));
 	info!("Bind address: {}", addr);
 
-	init_app_directory_structure()?;
+	let db_dir: PathBuf = init_app_directory_structure()?;
+	let db = Arc::new(init_db(&db_dir)?);
 
-	let server = Server::bind(&addr).serve(MakeService);
+	let server = Server::bind(&addr).serve(make_service_fn(move |_addr_stream| {
+		let db = Arc::clone(&db);
+		ready(Result::<AqaService, AqaServiceError>::Ok(AqaService { db }))
+	}));
 	server.await?;
 
 	Ok(())
@@ -38,10 +43,10 @@ enum InitAppFolderStructureError {
 	Io(#[from] std::io::Error),
 }
 
-static DB_DIR: &str = "DB";
-const DIRS_BY_DOWNLOAD_COUNT: [&str; 4] = ["1", "5", "10", "100"];
+const DB_DIR: &str = "DB";
+const DIRS_BY_DOWNLOAD_COUNT: [u64; 4] = [1, 5, 10, 100];
 
-fn init_app_directory_structure() -> Result<(), InitAppFolderStructureError> {
+fn init_app_directory_structure() -> Result<PathBuf, InitAppFolderStructureError> {
 	let cwd = std::env::current_dir()?;
 	let db_dir = cwd.join(DB_DIR);
 	if !db_dir.exists() {
@@ -53,33 +58,39 @@ fn init_app_directory_structure() -> Result<(), InitAppFolderStructureError> {
 	}
 
 	for dir in DIRS_BY_DOWNLOAD_COUNT {
-		let dir: PathBuf = db_dir.join(dir);
+		let dir: PathBuf = db_dir.join(dir.to_string());
 		if !dir.exists() {
 			std::fs::create_dir(&dir)?;
 		}
 	}
 
 	info!("Directory structure initialized");
-	Ok(())
+	Ok(db_dir)
 }
 
-struct MakeService;
+const ROCKSDB_DIR: &str = "index_db";
 
-impl Service<&AddrStream> for MakeService {
-	type Response = AqaService;
-	type Error = AqaServiceError;
-	type Future = Ready<Result<Self::Response, Self::Error>>;
+fn init_db(db_dir: &Path) -> Result<rocksdb::DB, rocksdb::Error> {
+	use rocksdb::*;
 
-	fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-		Poll::Ready(Ok(()))
-	}
+	let rocks_db_dir = db_dir.join(ROCKSDB_DIR);
 
-	fn call(&mut self, _req: &AddrStream) -> Self::Future {
-		ready(Ok(AqaService))
-	}
+	let cf_opts = Options::default();
+	let column_families = DIRS_BY_DOWNLOAD_COUNT
+		.into_iter()
+		.map(|count| ColumnFamilyDescriptor::new(format!("by_count_{}", count), cf_opts.clone()));
+
+	let mut db_opts = Options::default();
+	db_opts.create_missing_column_families(true);
+	db_opts.create_if_missing(true);
+
+	let db = DB::open_cf_descriptors(&db_opts, &rocks_db_dir, column_families)?;
+	Ok(db)
 }
 
-pub struct AqaService;
+pub struct AqaService {
+	db: Arc<rocksdb::DB>,
+}
 
 #[derive(Debug, Error)]
 pub enum AqaServiceError {
@@ -108,7 +119,12 @@ impl Service<Request<Body>> for AqaService {
 		let method = req.method().clone();
 		match (method, path.as_slice()) {
 			(Method::GET, ["api"]) => Box::pin(hello(req)),
-			(Method::POST, ["api", "upload"]) => Box::pin(handle_response(upload::upload(req))),
+			(Method::POST, ["api", "upload"]) => {
+				Box::pin(handle_response(upload::upload(req, Arc::clone(&self.db))))
+			}
+			(Method::GET, ["api", "download", uuid]) => Box::pin(handle_response(
+				download::download(uuid.to_string(), req, Arc::clone(&self.db)),
+			)),
 			_ => Box::pin(ready(Ok(Response::builder()
 				.status(StatusCode::NOT_FOUND)
 				.body("Not found\n".into())
@@ -143,7 +159,7 @@ async fn hello(_req: Request<Body>) -> Result<Response<Body>, AqaServiceError> {
 		.body("Hello from aqaSend\n".into())?)
 }
 
-fn split_uri_path(path: &str) -> impl Iterator<Item = &str> {
+pub fn split_uri_path(path: &str) -> impl Iterator<Item = &str> {
 	path.split('/').filter(|segment| !segment.is_empty())
 }
 

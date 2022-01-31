@@ -5,18 +5,17 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use bytes::{Bytes, BytesMut};
-use futures::stream::poll_fn;
-use futures::{Stream, StreamExt};
+use futures::Stream;
 use hyper::{Body, Request, Response};
 use log::*;
 use rocksdb::DB;
 use thiserror::Error;
-use tokio::io::{AsyncRead, AsyncReadExt};
+use tokio::io::AsyncReadExt;
 use uuid::Uuid;
 
 use crate::db_stuff::FileEntry;
 use crate::headers::DownloadCount;
-use crate::{split_uri_path, StatusCode, DB_DIR};
+use crate::{StatusCode, DB_DIR};
 
 #[derive(Debug, Error)]
 pub enum DownloadError {
@@ -36,11 +35,9 @@ pub enum DownloadError {
 
 pub async fn download(
 	uuid: String,
-	req: Request<Body>,
+	_req: Request<Body>,
 	db: Arc<DB>,
 ) -> Result<Response<Body>, DownloadError> {
-	// let mut uri_path = split_uri_path(req.uri().path()).skip(2);
-	// let uuid = uri_path.next().ok_or(DownloadError::NotFound)?;
 	let uuid = Uuid::parse_str(&uuid)?;
 	debug!("Downloading {}", uuid);
 
@@ -81,10 +78,7 @@ pub async fn download(
 
 	Ok(Response::builder()
 		.status(StatusCode::OK)
-		.body(Body::wrap_stream(FileStream {
-			file,
-			buffer: BytesMut::with_capacity(1024 * 1024 * 100),
-		}))?)
+		.body(Body::wrap_stream(FileStream::new(file)))?)
 }
 
 struct FileStream {
@@ -92,19 +86,11 @@ struct FileStream {
 	buffer: BytesMut,
 }
 
-impl Future for FileStream {
-	type Output = Result<Bytes, std::io::Error>;
-
-	fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-		unsafe { Pin::new_unchecked(&mut self.get_unchecked_mut().foo()).poll(cx) }
-	}
-}
-
 impl FileStream {
-	async fn foo(&mut self) -> Result<Bytes, std::io::Error> {
-		match self.file.read_buf(&mut self.buffer).await {
-			Ok(size) => Ok(self.buffer.split_to(size).freeze()),
-			Err(err) => Err(err),
+	fn new(file: tokio::fs::File) -> Self {
+		FileStream {
+			file,
+			buffer: BytesMut::with_capacity(1024 * 1024 * 10),
 		}
 	}
 }
@@ -113,9 +99,14 @@ impl Stream for FileStream {
 	type Item = Result<Bytes, std::io::Error>;
 
 	fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-		self.poll(cx).map(|x| match x {
-			Ok(x) if x.is_empty() => None,
-			_ => Some(x),
-		})
+		let mut fut = async move {
+			let this = self.get_mut();
+			match this.file.read_buf(&mut this.buffer).await {
+				Ok(0) => None,
+				Ok(count) => Some(Ok(this.buffer.split_to(count).freeze())),
+				Err(err) => Some(Err(err)),
+			}
+		};
+		(unsafe { Pin::new_unchecked(&mut fut) }).poll(cx)
 	}
 }

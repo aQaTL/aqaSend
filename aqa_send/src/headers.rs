@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::fmt::Formatter;
 
 use hyper::http::HeaderValue;
@@ -55,13 +56,13 @@ impl TryFrom<Option<&HeaderValue>> for DownloadCount {
 	fn try_from(v: Option<&HeaderValue>) -> Result<Self, Self::Error> {
 		let v = v.ok_or(HeaderError::DownloadCountHeaderMissing)?;
 		let v = v.to_str().map_err(|_| DownloadCountParse)?;
+		if !crate::DIRS_BY_DOWNLOAD_COUNT.contains(&v) {
+			return Err(HeaderError::DownloadCountInvalidCount);
+		}
 		if v == "infinite" {
 			return Ok(DownloadCount::Infinite);
 		}
 		let count: u64 = v.parse().map_err(|_| HeaderError::DownloadCountParse)?;
-		if !crate::DIRS_BY_DOWNLOAD_COUNT.contains(&count) {
-			return Err(HeaderError::DownloadCountInvalidCount);
-		}
 		Ok(DownloadCount::Count(count))
 	}
 }
@@ -69,7 +70,7 @@ impl TryFrom<Option<&HeaderValue>> for DownloadCount {
 impl std::fmt::Display for DownloadCount {
 	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
 		match self {
-			DownloadCount::Infinite => write!(f, "inf"),
+			DownloadCount::Infinite => write!(f, "infinite"),
 			DownloadCount::Count(count) => write!(f, "{}", count),
 		}
 	}

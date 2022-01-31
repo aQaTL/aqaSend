@@ -44,7 +44,7 @@ enum InitAppFolderStructureError {
 }
 
 const DB_DIR: &str = "DB";
-const DIRS_BY_DOWNLOAD_COUNT: [u64; 4] = [1, 5, 10, 100];
+const DIRS_BY_DOWNLOAD_COUNT: [&str; 5] = ["1", "5", "10", "100", "infinite"];
 
 fn init_app_directory_structure() -> Result<PathBuf, InitAppFolderStructureError> {
 	let cwd = std::env::current_dir()?;

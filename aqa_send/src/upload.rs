@@ -89,6 +89,9 @@ pub async fn upload(req: Request<Body>, db: Arc<DB>) -> Result<Response<Body>, U
 			download_count_type: download_count,
 			download_count: 0,
 			filename: header.file_name,
+			content_type: header
+				.content_type
+				.unwrap_or_else(|| String::from("application/octet-stream")),
 		};
 		db.put(&upload_uuid.as_bytes(), bincode::serialize(&file_entry)?)?;
 
@@ -122,7 +125,7 @@ pub struct Multipart {
 }
 
 pub struct MultipartHeader {
-	name: String,
+	_name: String,
 	file_name: String,
 	content_type: Option<String>,
 }
@@ -237,7 +240,7 @@ impl Multipart {
 		self.buf.advance(2);
 
 		Ok(MultipartHeader {
-			name: name.ok_or(NameNotFound)?,
+			_name: name.ok_or(NameNotFound)?,
 			file_name: file_name.ok_or(FileNameNotFound)?,
 			content_type,
 		})

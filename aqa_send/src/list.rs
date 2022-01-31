@@ -24,12 +24,15 @@ struct FileModel {
 pub async fn list(_req: Request<Body>, db: Arc<DB>) -> Result<Response<Body>, ListError> {
 	let list: Vec<FileModel> = db
 		.iterator(IteratorMode::Start)
-		.map(|(key, value)| (Uuid::from_slice(&key).unwrap(), bincode::deserialize(&value)))
-		.filter_map(|(id, file_entry)| {
-			match file_entry {
-				Ok(file_entry) => Some(FileModel { id, file_entry }),
-				Err(_) => None,
-			}
+		.map(|(key, value)| {
+			(
+				Uuid::from_slice(&key).unwrap(),
+				bincode::deserialize(&value),
+			)
+		})
+		.filter_map(|(id, file_entry)| match file_entry {
+			Ok(file_entry) => Some(FileModel { id, file_entry }),
+			Err(_) => None,
 		})
 		.collect();
 

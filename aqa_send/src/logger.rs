@@ -13,6 +13,8 @@ pub fn init() {
 	}
 }
 
+static COLORS: [u32; 5] = [91, 31, 33, 36, 90];
+
 impl log::Log for Logger {
 	fn enabled(&self, _metadata: &Metadata) -> bool {
 		true
@@ -20,7 +22,8 @@ impl log::Log for Logger {
 
 	fn log(&self, record: &Record) {
 		println!(
-			"[{}][{}] {}",
+			"\x1B[0;{}m[{}][{}]\x1B[0m {}",
+			COLORS[record.level() as usize - 1],
 			record.level(),
 			record.metadata().target(),
 			record.args(),
@@ -28,4 +31,11 @@ impl log::Log for Logger {
 	}
 
 	fn flush(&self) {}
+}
+
+#[test]
+fn color_test() {
+	for c in COLORS {
+		println!("\x1B[0;{}mHello World\x1b[0m", c);
+	}
 }

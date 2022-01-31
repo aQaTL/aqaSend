@@ -1,8 +1,10 @@
 use crate::FileEntry;
 use hyper::{Body, Request, Response, StatusCode};
 use rocksdb::{IteratorMode, DB};
+use serde::Serialize;
 use std::sync::Arc;
 use thiserror::Error;
+use uuid::Uuid;
 
 #[derive(Debug, Error)]
 pub enum ListError {
@@ -12,11 +14,23 @@ pub enum ListError {
 	Json(#[from] serde_json::Error),
 }
 
+#[derive(Serialize)]
+struct FileModel {
+	id: Uuid,
+	#[serde(flatten)]
+	file_entry: FileEntry,
+}
+
 pub async fn list(_req: Request<Body>, db: Arc<DB>) -> Result<Response<Body>, ListError> {
-	let list: Vec<FileEntry> = db
+	let list: Vec<FileModel> = db
 		.iterator(IteratorMode::Start)
-		.map(|(_key, value)| bincode::deserialize(&value))
-		.filter_map(|result| result.ok())
+		.map(|(key, value)| (Uuid::from_slice(&key).unwrap(), bincode::deserialize(&value)))
+		.filter_map(|(id, file_entry)| {
+			match file_entry {
+				Ok(file_entry) => Some(FileModel { id, file_entry }),
+				Err(_) => None,
+			}
+		})
 		.collect();
 
 	let resp = if cfg!(debug_assertions) {

@@ -10,6 +10,7 @@ use std::time::Duration;
 
 use crate::db_stuff::FileEntry;
 use crate::headers::{DownloadCount, Lifetime};
+use hyper::http::HeaderValue;
 use hyper::service::{make_service_fn, Service};
 use hyper::Server;
 use hyper::{Body, Method, Request, Response, StatusCode};
@@ -212,17 +213,24 @@ impl Service<Request<Body>> for AqaService {
 		let uri_path = req.uri().path().to_owned();
 		let path: Vec<&str> = split_uri_path(&uri_path).collect();
 		let method = req.method().clone();
+		let origin_header = req
+			.headers()
+			.get("origin")
+			.map(|hv: &HeaderValue| hv.to_owned());
 		match (method, path.as_slice()) {
 			(Method::GET, ["api"]) => Box::pin(hello(req)),
-			(Method::POST, ["api", "upload"]) => {
-				Box::pin(handle_response(upload::upload(req, Arc::clone(&self.db))))
-			}
+			(Method::POST, ["api", "upload"]) => Box::pin(handle_response(
+				upload::upload(req, Arc::clone(&self.db)),
+				origin_header,
+			)),
 			(Method::GET, ["api", "download", uuid]) => Box::pin(handle_response(
 				download::download(uuid.to_string(), req, Arc::clone(&self.db)),
+				origin_header,
 			)),
-			(Method::GET, ["api", "list.json"]) => {
-				Box::pin(handle_response(list::list(req, Arc::clone(&self.db))))
-			}
+			(Method::GET, ["api", "list.json"]) => Box::pin(handle_response(
+				list::list(req, Arc::clone(&self.db)),
+				origin_header,
+			)),
 			_ => Box::pin(ready(Ok(Response::builder()
 				.status(StatusCode::NOT_FOUND)
 				.body("Not found\n".into())
@@ -233,12 +241,18 @@ impl Service<Request<Body>> for AqaService {
 
 async fn handle_response<E: std::error::Error>(
 	resp: impl Future<Output = Result<Response<Body>, E>>,
+	origin_header: Option<HeaderValue>,
 ) -> Result<Response<Body>, AqaServiceError> {
 	match resp.await {
-		Ok(resp) => Ok(resp),
+		Ok(mut resp) => {
+			if let Some(hv) = origin_header {
+				resp.headers_mut().append("Access-Control-Allow-Origin", hv);
+			}
+			debug!("{:?}", resp);
+			Ok(resp)
+		}
 		Err(err) => {
 			error!("{:?}", err);
-
 			let body = if cfg!(debug_assertions) {
 				Body::from(err.to_string())
 			} else {

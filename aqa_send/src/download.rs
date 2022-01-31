@@ -77,6 +77,10 @@ pub async fn download(
 		.map_err(DownloadError::FileSendIo)?;
 
 	Ok(Response::builder()
+		.header(
+			"Content-Disposition",
+			format!("filename=\"{}\"", file_entry.filename),
+		)
 		.status(StatusCode::OK)
 		.body(Body::wrap_stream(FileStream::new(file)))?)
 }

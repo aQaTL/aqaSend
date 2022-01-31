@@ -225,7 +225,16 @@ impl Multipart {
 						};
 						match key {
 							"name" => name = Some(value.to_string()),
-							"filename" => file_name = Some(value.to_string()),
+							"filename" => {
+								let mut value = value;
+								if value.starts_with('"') {
+									value = &value[1..];
+								}
+								if value.ends_with('"') {
+									value = &value[..(value.len() - 1)];
+								}
+								file_name = Some(value.to_string())
+							}
 							_ => debug!("Unknown key: {}", key),
 						}
 					}

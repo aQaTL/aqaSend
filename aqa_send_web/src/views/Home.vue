@@ -1,18 +1,53 @@
 <template>
   <div class="home">
-    <img alt="Vue logo" src="../assets/logo.png">
-    <HelloWorld msg="Welcome to Your Vue.js + TypeScript App"/>
+    <!--    <img alt="Vue logo" src="../assets/logo.png">-->
+    <!--    <HelloWorld msg="Welcome to Your Vue.js + TypeScript App"/>-->
+    <div>
+      <div v-for="fileEntry in this.fileEntries">
+        <div><a :href="`${this.API_ENDPOINT}/api/download/${fileEntry.id}`">{{
+            fileEntry.filename
+          }}</a> {{ fileEntry.download_count }}
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script lang="ts">
-import { Options, Vue } from 'vue-class-component';
-import HelloWorld from '@/components/HelloWorld.vue'; // @ is an alias to /src
+import {defineComponent} from "vue";
 
-@Options({
-  components: {
-    HelloWorld,
+const API_ENDPOINT = process.env.NODE_ENV === "production" ? "notsureyet" : "http://127.0.0.1:8000";
+
+export default defineComponent({
+  components: {},
+
+  data() {
+    return {
+      API_ENDPOINT: API_ENDPOINT,
+      counter: 9,
+      fileEntries: [],
+    }
   },
+
+  mounted() {
+    console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
+    this.loadList();
+  },
+
+  methods: {
+    async loadList() {
+      let response = await fetch(
+          `${API_ENDPOINT}/api/list.json`,
+          {
+            method: "GET",
+            headers: {}
+          }
+      );
+      this.fileEntries = await response.json();
+      console.log(this.fileEntries);
+    },
+
+  }
 })
-export default class Home extends Vue {}
 </script>
+

@@ -43,7 +43,7 @@ export default defineComponent({
           }
       );
       this.fileEntries = await response.json();
-      console.log(this.fileEntries);
+      console.debug(`Loaded ${this.fileEntries.length} files`);
     },
 
   }

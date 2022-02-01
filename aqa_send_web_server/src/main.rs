@@ -78,7 +78,10 @@ impl Service<Request<Body>> for MemoryFilesService {
 
 		let file: &'static [u8] = match DIST.get(path) {
 			Some(v) => *v,
-			None => return ready(not_found()),
+			None => match DIST.get("index.html") {
+				Some(v) => *v,
+				None => return ready(not_found()),
+			},
 		};
 
 		ready(Response::builder().status(200).body(Body::from(file)))

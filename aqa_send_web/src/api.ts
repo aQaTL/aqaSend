@@ -22,7 +22,7 @@ export interface UploadParams {
 	lifetime: Lifetime,
 }
 
-export async function uploadFile(file: File | string,
+export async function uploadFile(file: Blob,
 								 filename: string,
 								 params: UploadParams
 ): Promise<boolean>

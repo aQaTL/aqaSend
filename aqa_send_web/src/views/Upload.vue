@@ -65,11 +65,12 @@ export default defineComponent({
       };
 
       let filename = this.pasteFilename;
-      if (filename.trim().length == 0) {
+      if (filename.trim().length === 0) {
         filename = "untitled.txt";
       }
 
-      await uploadFile(this.pasteText, filename, uploadParams);
+      let blob = new Blob([this.pasteText], {type: "text/plain"});
+      await uploadFile(blob, filename, uploadParams);
     }
   }
 });
@@ -90,15 +91,20 @@ export default defineComponent({
   gap: 10px;
   grid-template-columns: minmax(800px, 1fr);
 
-  input[type=file]::file-selector-button {
-    @extend .bigButton;
-  }
-
   input[type=file] {
     font-family: "Nunito Sans", sans-serif;
     color: black;
     font-size: 16pt;
   }
+
+  input[type=file]::file-selector-button {
+    @extend .bigButton;
+  }
+
+  input[type=file]::-webkit-file-upload-button {
+    @extend .bigButton;
+  }
+
 }
 
 .pasteUpload {
@@ -107,7 +113,7 @@ export default defineComponent({
   gap: 1em;
 
   input[type=text] {
-    color: #ae9ff5;
+    color: #AE9FF5;
     font-size: 16pt;
     background-color: #2C3E50;
     border: 1px solid black;
@@ -117,8 +123,8 @@ export default defineComponent({
 
   textarea {
     height: 400px;
-    background-color: #2c3e50;
-    color: #ae9ff5;
+    background-color: #2C3E50;
+    color: #AE9FF5;
     border: 1px solid black;
     border-radius: 5px;
     font-family: "Cascadia Code", monospace;
@@ -130,12 +136,12 @@ export default defineComponent({
   font-family: "Nunito Sans", sans-serif;
   font-weight: bold;
   font-size: 14pt;
-  background-color: #ae9ff5;
+  background-color: #AE9FF5;
   border: 1px solid black;
   border-radius: 5px;
 
   &:hover {
-    background-color: darken(#ae9ff5, 5%);
+    background-color: darken(#AE9FF5, 5%);
   }
 }
 
@@ -149,16 +155,19 @@ export default defineComponent({
   flex-direction: row;
   width: 100%;
 }
-.lineAroundText:before, .lineAroundText:after{
+
+.lineAroundText:before, .lineAroundText:after {
   content: "";
   flex: 1 1;
-  border-bottom: 1px solid #ae9ff5;
+  border-bottom: 1px solid #AE9FF5;
   margin-top: auto;
   margin-bottom: auto;
 }
+
 .lineAroundText:before {
   margin-right: 10px;
 }
+
 .lineAroundText:after {
   margin-left: 10px;
 }

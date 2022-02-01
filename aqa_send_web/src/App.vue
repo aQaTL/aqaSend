@@ -1,36 +1,50 @@
 <template>
   <div id="nav">
-    <h1>aQaSend</h1>
-    <router-link to="/">Home</router-link> |
-    <router-link to="/upload">Upload</router-link>
-    <router-link to="/account">Account</router-link>
+    <h1 id="aqaSendHeader">aQaSend</h1>
+    <div id="routerLinks">
+      <router-link to="/">Home</router-link>
+      <router-link to="/upload">Upload</router-link>
+      <router-link to="/account">Account</router-link>
+    </div>
   </div>
   <router-view/>
 </template>
 
 <style lang="scss">
+@import url("./fonts.scss");
+
 body {
-  background-color: #2c3e50;
+  background-color: #2C3E50;
   margin-top: 0;
 }
 
 #app {
-  font-family: Avenir, Helvetica, Arial, sans-serif;
+  font-family: "Nunito Sans", Avenir, Helvetica, Arial, sans-serif;
   text-align: center;
-  color: #f59fd8;
+  color: #F59FD8;
 }
 
 #nav {
-  display: flex;
-  flex-direction: row;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
   align-items: baseline;
-  justify-content: flex-start;
-  gap: 10px;
+  border-bottom: 3px dashed #ae9ff5;
+
+  #aqaSendHeader {
+    justify-self: start;
+  }
+
+  #routerLinks {
+    display: flex;
+    justify-self: center;
+    gap: 10px;
+  }
 
   a {
-    color: #f5c6d8;
+    color: #F5C6D8;
 
     font-weight: bold;
+    font-size: 14pt;
 
     border-style: solid;
     border-radius: 5px;

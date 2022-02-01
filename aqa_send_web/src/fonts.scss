@@ -1,0 +1,22 @@
+@font-face {
+  font-family: "Cascadia Code";
+  src: local("Cascadia Code"), url("/fonts/CascadiaCode.woff2") format("woff2");
+  font-display: auto;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Nunito Sans";
+  src: local("Nunito Sans"), url("/fonts/nunito-sans-v11-latin-regular.woff2") format("woff2");
+  font-display: auto;
+  font-style: normal;
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: "Nunito Sans";
+  src: local("Nunito Sans"), url("/fonts/nunito-sans-v11-latin-700.woff2") format("woff2");
+  font-display: auto;
+  font-style: normal;
+  font-weight: 700;
+}

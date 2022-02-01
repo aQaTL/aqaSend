@@ -24,15 +24,13 @@ mod db_stuff;
 mod download;
 mod headers;
 mod list;
-mod logger;
 mod upload;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-	logger::init();
+	aqa_logger::init();
 
 	let addr = SocketAddr::from(([127, 0, 0, 1], 8000));
-	info!("Bind address: {}", addr);
 
 	let db_dir: PathBuf = init_app_directory_structure()?;
 	let db = Arc::new(init_db(&db_dir)?);
@@ -40,11 +38,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	tokio::spawn(cleanup_task(Arc::clone(&db)));
 
 	#[cfg(not(target_os = "linux"))]
-	let servers = vec![Server::bind(&addr)];
+	let servers = {
+		info!("Bind address: {}", addr);
+		vec![Server::bind(&addr)]
+	};
 	#[cfg(target_os = "linux")]
 	let servers = {
 		match systemd_socket_activation::systemd_socket_activation() {
 			Ok(sockets) if !sockets.is_empty() => {
+				info!("Using {} sockets from systemd", sockets.len());
 				let mut servers = Vec::with_capacity(sockets.len());
 				for socket in sockets {
 					servers.push(Server::from_tcp(socket)?);
@@ -52,10 +54,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 				servers
 			}
 			Ok(_) => {
+				info!("Bind address: {}", addr);
 				vec![Server::bind(&addr)]
 			}
 			Err(err) => {
 				error!("Systemd socket activation failed: {:?}", err);
+				info!("Bind address: {}", addr);
 				vec![Server::bind(&addr)]
 			}
 		}

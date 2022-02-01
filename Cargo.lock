@@ -3,9 +3,17 @@
 version = 3
 
 [[package]]
+name = "aqa_logger"
+version = "0.1.0"
+dependencies = [
+ "log",
+]
+
+[[package]]
 name = "aqa_send"
 version = "0.1.0"
 dependencies = [
+ "aqa_logger",
  "bincode",
  "bytes",
  "futures",
@@ -18,6 +26,20 @@ dependencies = [
  "thiserror",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "aqa_send_web_server"
+version = "0.1.0"
+dependencies = [
+ "aqa_logger",
+ "dir_embedder",
+ "futures",
+ "hyper",
+ "lazy_static",
+ "log",
+ "systemd-socket-activation",
+ "tokio",
 ]
 
 [[package]]
@@ -99,6 +121,16 @@ dependencies = [
  "glob",
  "libc",
  "libloading",
+]
+
+[[package]]
+name = "dir_embedder"
+version = "0.1.0"
+source = "git+https://github.com/aQaTL/dir_embedder.git?branch=main#ce5dcbc3d782f28f486efe652d7e5996af590fcd"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

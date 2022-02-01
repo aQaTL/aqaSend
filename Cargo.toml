@@ -1,2 +1,3 @@
 [workspace]
-members = ["aqa_send"]
+default-members = ["aqa_send"]
+members = ["aqa_send", "aqa_send_web_server", "aqa_logger"]

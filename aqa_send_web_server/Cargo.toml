@@ -1,22 +1,17 @@
 [package]
-name = "aqa_send"
+name = "aqa_send_web_server"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+dir_embedder = { git = "https://github.com/aQaTL/dir_embedder.git", branch = "main" }
+lazy_static = "1.4.0"
 hyper = { version = "0.14.16", features = ["server", "http1", "http2", "tcp", "stream"] }
 tokio = { version = "1.15.0", features = ["rt-multi-thread", "net", "macros", "fs"] }
 futures = "0.3.19"
 log = "0.4.14"
-thiserror = "1.0.30"
-uuid = { version = "0.8.2", features = ["v4", "serde"] }
-bytes = "1.1.0"
-rocksdb = "0.17.0"
-serde = { version = "1.0.136", features = ["derive"] }
-serde_json = "1.0.78"
-bincode = "1.3.3"
 
 aqa_logger = { path = "../aqa_logger" }
 

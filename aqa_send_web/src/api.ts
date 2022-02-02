@@ -28,6 +28,7 @@ export async function uploadFile(file: Blob,
 ): Promise<boolean>
 {
 	console.debug(`Uploading ${filename}`);
+	console.debug("Upload params: ", params);
 
 	let form = document.createElement("form");
 	form.enctype = "multipart/form-data";

@@ -1,12 +1,47 @@
 <template>
+  <div id="uploadParams">
+    <h2 class="lineAroundText">Parameters</h2>
+    <div class="param">
+      <fieldset>
+        <legend>Visibility</legend>
+
+        <input type="radio" id="visibility-public" v-model="uploadParams.visibility">
+        <label for="visibility-public">Public</label>
+
+        <!-- TODO(aqatl): Allow only if logged in. Otherwise, grey it out -->
+        <input type="radio" id="visibility-private" v-model="uploadParams.visibility">
+        <label for="visibility-private">Private</label>
+      </fieldset>
+    </div>
+    <div class="param">
+      <span>Download count</span>
+      <select v-model="uploadParams.downloadCount">
+        <option value="1">1</option>
+        <option value="5">5</option>
+        <option value="10">10</option>
+        <option value="100">100</option>
+
+        <!-- TODO(aqatl): Display only if logged in -->
+        <option value="infinite">&infin;</option>
+      </select>
+      <span>Selected download count: {{ uploadParams.downloadCount }}</span>
+    </div>
+    <div class="param">
+      <span>Lifetime</span>
+
+    </div>
+    <div class="param">
+      <span>Password</span>
+      <input type="password" placeholder="Leave empty for unprotected file" v-model="uploadParams.password">
+    </div>
+  </div>
   <div id="upload">
-    <h2>Upload file</h2>
+    <h2 class="lineAroundText">Upload file</h2>
     <div class="fileUpload">
       <input type="file" name="files" ref="filePicker" multiple>
       <input type="button" value="Upload" class="bigButton" @click="onUploadFiles">
     </div>
-    <div id="orText" class="lineAroundText">Or</div>
-    <h2>Upload text</h2>
+    <h2 class="lineAroundText">Upload text</h2>
     <div class="pasteUpload">
       <input type="text" v-model="pasteFilename" placeholder="File name">
       <textarea v-model="pasteText" placeholder="Paste your stuff here"></textarea>
@@ -33,6 +68,12 @@ export default defineComponent({
 
       pasteText: "",
       pasteFilename: "",
+
+      uploadParams: {
+        visibility: Visibility.public,
+        downloadCount: "1",
+        password: "",
+      } as UploadParams,
     };
   },
 
@@ -44,33 +85,19 @@ export default defineComponent({
         return;
       }
 
-      const uploadParams: UploadParams = {
-        visibility: Visibility.public,
-        lifetime: "infinite",
-        downloadCount: "1",
-        password: "none",
-      };
-
       for (let i = 0; i < files.length; i++) {
-        await uploadFile(files[i], files[i].name, uploadParams);
+        await uploadFile(files[i], files[i].name, this.uploadParams);
       }
     },
 
     async onUploadPaste() {
-      const uploadParams: UploadParams = {
-        visibility: Visibility.public,
-        lifetime: "infinite",
-        downloadCount: "1",
-        password: "none",
-      };
-
       let filename = this.pasteFilename;
       if (filename.trim().length === 0) {
         filename = "untitled.txt";
       }
 
       let blob = new Blob([this.pasteText], {type: "text/plain"});
-      await uploadFile(blob, filename, uploadParams);
+      await uploadFile(blob, filename, this.uploadParams);
     }
   }
 });

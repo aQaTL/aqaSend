@@ -5,11 +5,11 @@
       <fieldset>
         <legend>Visibility</legend>
 
-        <input type="radio" id="visibility-public" v-model="uploadParams.visibility">
+        <input type="radio" id="visibility-public" :value="Visibility.public" v-model="uploadParams.visibility">
         <label for="visibility-public">Public</label>
 
         <!-- TODO(aqatl): Allow only if logged in. Otherwise, grey it out -->
-        <input type="radio" id="visibility-private" v-model="uploadParams.visibility">
+        <input type="radio" id="visibility-private" :value="Visibility.private" v-model="uploadParams.visibility">
         <label for="visibility-private">Private</label>
       </fieldset>
     </div>
@@ -63,6 +63,7 @@ export default defineComponent({
   data() {
     return {
       API_ENDPOINT: API_ENDPOINT,
+      Visibility: Visibility,
 
       files: [],
 

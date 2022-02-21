@@ -3,6 +3,7 @@ use hyper::{Body, Request, Response, StatusCode};
 use rocksdb::{IteratorMode, DB};
 use serde::Serialize;
 use std::sync::Arc;
+use sqlx::SqlitePool;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -21,7 +22,7 @@ struct FileModel {
 	file_entry: FileEntry,
 }
 
-pub async fn list(_req: Request<Body>, db: Arc<DB>) -> Result<Response<Body>, ListError> {
+pub async fn list(_req: Request<Body>, db: SqlitePool) -> Result<Response<Body>, ListError> {
 	let list: Vec<FileModel> = db
 		.iterator(IteratorMode::Start)
 		.map(|(key, value)| {

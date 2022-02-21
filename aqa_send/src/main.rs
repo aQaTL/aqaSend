@@ -1,20 +1,27 @@
+extern crate core;
+
 use futures::future::join_all;
 use std::error::Error;
 use std::future::{ready, Future};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
 use crate::db_stuff::FileEntry;
+use crate::download::DownloadError::Db;
 use crate::headers::{DownloadCount, Lifetime, DOWNLOAD_COUNT, LIFETIME, PASSWORD, VISIBILITY};
+use crate::InitDbError::DbConnect;
 use hyper::http::HeaderValue;
 use hyper::service::{make_service_fn, Service};
 use hyper::Server;
 use hyper::{Body, Method, Request, Response, StatusCode};
 use log::*;
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+use sqlx::{ConnectOptions, SqliteConnection, SqlitePool};
 use thiserror::Error;
 use tokio::time::Instant;
 use uuid::Uuid;
@@ -33,9 +40,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	let addr = SocketAddr::from(([127, 0, 0, 1], 8000));
 
 	let db_dir: PathBuf = init_app_directory_structure()?;
-	let db = Arc::new(init_db(&db_dir)?);
 
-	tokio::spawn(cleanup_task(Arc::clone(&db)));
+	let connection_pool = init_db(&db_dir).await?;
+
+	tokio::spawn(cleanup_task(connection_pool.clone()));
 
 	#[cfg(not(target_os = "linux"))]
 	let servers = {
@@ -67,7 +75,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 	join_all(servers.into_iter().map(|server| {
 		server.serve(make_service_fn(|_addr_stream| {
-			let db = Arc::clone(&db);
+			let db = connection_pool;
 			ready(Result::<AqaService, AqaServiceError>::Ok(AqaService { db }))
 		}))
 	}))
@@ -111,85 +119,99 @@ fn init_app_directory_structure() -> Result<PathBuf, InitAppFolderStructureError
 
 const ROCKSDB_DIR: &str = "index_db";
 
-fn init_db(db_dir: &Path) -> Result<rocksdb::DB, rocksdb::Error> {
-	use rocksdb::*;
-
-	let rocks_db_dir = db_dir.join(ROCKSDB_DIR);
-
-	let cf_opts = Options::default();
-	let column_families = DIRS_BY_DOWNLOAD_COUNT
-		.into_iter()
-		.map(|count| ColumnFamilyDescriptor::new(format!("by_count_{}", count), cf_opts.clone()));
-
-	let mut db_opts = Options::default();
-	db_opts.create_missing_column_families(true);
-	db_opts.create_if_missing(true);
-
-	let db = DB::open_cf_descriptors(&db_opts, &rocks_db_dir, column_families)?;
-	Ok(db)
+#[derive(Debug, Error)]
+enum InitDbError {
+	#[error("Database path contains invalid unicode characters")]
+	InvalidUnicodeInPath,
+	#[error("Failed to create SqliteConnectOptions: {0:?}")]
+	ParseSqliteUrl(sqlx::Error),
+	#[error("Failed to connect to Sqlite: {0:?}")]
+	DbConnect(sqlx::Error),
+	#[error(transparent)]
+	DbMigration(#[from] sqlx::migrate::MigrateError),
 }
 
-async fn cleanup_task(db: Arc<rocksdb::DB>) {
-	let mut cleanup_tick = tokio::time::interval_at(
-		Instant::now() + Duration::from_secs(60),
-		Duration::from_secs(60 * 60),
+async fn init_db(db_dir: &Path) -> Result<SqlitePool, InitDbError> {
+	let db_file = db_dir.join("db");
+	let connection_url = format!(
+		"sqlite://{}",
+		db_file.to_str().ok_or(InitDbError::InvalidUnicodeInPath)?
 	);
+	let connect_options =
+		SqliteConnectOptions::from_str(&connection_url).map_err(InitDbError::ParseSqliteUrl)?;
+	let connection_pool: SqlitePool = SqlitePoolOptions::new()
+		.connect_with(connect_options)
+		.await
+		.map_err(DbConnect)?;
 
-	loop {
-		let _ = cleanup_tick.tick().await;
-		debug!("Cleanup task starting");
+	sqlx::migrate!("./db_migration")
+		.run(&connection_pool)
+		.await?;
 
-		let mut deleted_files_count: u64 = 0;
-		for (key, value) in db.iterator(rocksdb::IteratorMode::Start) {
-			let file_entry: FileEntry = match bincode::deserialize(&value) {
-				Ok(v) => v,
-				Err(_) => {
-					warn!("Failed to deserialize {}", String::from_utf8_lossy(&key));
-					continue;
-				}
-			};
+	Ok(connection_pool)
+}
 
-			let uuid = Uuid::from_slice(&key).unwrap();
-
-			if let DownloadCount::Count(max_count) = file_entry.download_count_type {
-				if file_entry.download_count >= max_count {
-					match db.delete(&key) {
-						Ok(_) => (),
-						Err(err) => error!("DB error when deleting {}: {:?}", uuid, err),
-					}
-					let mut file_path = PathBuf::from(DB_DIR);
-					file_path.push(file_entry.download_count_type.to_string());
-					file_path.push(uuid.to_string());
-
-					match tokio::fs::remove_file(file_path).await {
-						Ok(_) => deleted_files_count += 1,
-						Err(err) => error!("DB error when deleting {}: {:?}", uuid, err),
-					}
-					continue;
-				}
-			}
-
-			if let Lifetime::Duration(lifetime) = file_entry.lifetime {
-				if let Ok(elapsed) = file_entry.upload_date.elapsed() {
-					if elapsed > lifetime {
-						match db.delete(&key) {
-							Ok(_) => deleted_files_count += 1,
-							Err(err) => error!("DB error when deleting {}: {:?}", uuid, err),
-						}
-						//TODO(aqatl): remove lifetime bounded file from disk
-						continue;
-					}
-				}
-			}
-		}
-
-		debug!("Cleanup task finished");
-		info!("Cleanup removed {} files.", deleted_files_count);
-	}
+async fn cleanup_task(db: SqlitePool) {
+// 	let mut cleanup_tick = tokio::time::interval_at(
+// 		Instant::now() + Duration::from_secs(60),
+// 		Duration::from_secs(60 * 60),
+// 	);
+//
+// 	loop {
+// 		let _ = cleanup_tick.tick().await;
+// 		debug!("Cleanup task starting");
+//
+// 		let mut deleted_files_count: u64 = 0;
+// 		for (key, value) in db.iterator(rocksdb::IteratorMode::Start) {
+// 			let file_entry: FileEntry = match bincode::deserialize(&value) {
+// 				Ok(v) => v,
+// 				Err(_) => {
+// 					warn!("Failed to deserialize {}", String::from_utf8_lossy(&key));
+// 					continue;
+// 				}
+// 			};
+//
+// 			let uuid = Uuid::from_slice(&key).unwrap();
+//
+// 			if let DownloadCount::Count(max_count) = file_entry.download_count_type {
+// 				if file_entry.download_count >= max_count {
+// 					match db.delete(&key) {
+// 						Ok(_) => (),
+// 						Err(err) => error!("DB error when deleting {}: {:?}", uuid, err),
+// 					}
+// 					let mut file_path = PathBuf::from(DB_DIR);
+// 					file_path.push(file_entry.download_count_type.to_string());
+// 					file_path.push(uuid.to_string());
+//
+// 					match tokio::fs::remove_file(file_path).await {
+// 						Ok(_) => deleted_files_count += 1,
+// 						Err(err) => error!("DB error when deleting {}: {:?}", uuid, err),
+// 					}
+// 					continue;
+// 				}
+// 			}
+//
+// 			if let Lifetime::Duration(lifetime) = file_entry.lifetime {
+// 				if let Ok(elapsed) = file_entry.upload_date.elapsed() {
+// 					if elapsed > lifetime {
+// 						match db.delete(&key) {
+// 							Ok(_) => deleted_files_count += 1,
+// 							Err(err) => error!("DB error when deleting {}: {:?}", uuid, err),
+// 						}
+// 						//TODO(aqatl): remove lifetime bounded file from disk
+// 						continue;
+// 					}
+// 				}
+// 			}
+// 		}
+//
+// 		debug!("Cleanup task finished");
+// 		info!("Cleanup removed {} files.", deleted_files_count);
+// 	}
 }
 
 pub struct AqaService {
-	db: Arc<rocksdb::DB>,
+	db: SqlitePool,
 }
 
 #[derive(Debug, Error)]
@@ -224,16 +246,16 @@ impl Service<Request<Body>> for AqaService {
 		match (method, path.as_slice()) {
 			(Method::GET, ["api"]) => Box::pin(hello(req)),
 			(Method::POST, ["api", "upload"]) => Box::pin(handle_response(
-				upload::upload(req, Arc::clone(&self.db)),
+				upload::upload(req, self.db.clone()),
 				origin_header,
 			)),
 			(Method::OPTIONS, ["api", "upload"]) => Box::pin(preflight_request(req)),
 			(Method::GET, ["api", "download", uuid]) => Box::pin(handle_response(
-				download::download(uuid.to_string(), req, Arc::clone(&self.db)),
+				download::download(uuid.to_string(), req, self.db.clone()),
 				origin_header,
 			)),
 			(Method::GET, ["api", "list.json"]) => Box::pin(handle_response(
-				list::list(req, Arc::clone(&self.db)),
+				list::list(req, self.db.clone()),
 				origin_header,
 			)),
 			_ => Box::pin(ready(Ok(Response::builder()

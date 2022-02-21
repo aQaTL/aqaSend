@@ -8,7 +8,7 @@ use bytes::{Bytes, BytesMut};
 use futures::Stream;
 use hyper::{Body, Request, Response};
 use log::*;
-use rocksdb::DB;
+use sqlx::SqlitePool;
 use thiserror::Error;
 use tokio::io::AsyncReadExt;
 use uuid::Uuid;
@@ -26,7 +26,7 @@ pub enum DownloadError {
 	#[error("File id is not a valid uuid")]
 	Uuid(#[from] uuid::Error),
 	#[error(transparent)]
-	Db(#[from] rocksdb::Error),
+	Db(#[from] sqlx::Error),
 	#[error(transparent)]
 	Serialization(#[from] bincode::Error),
 	#[error(transparent)]
@@ -36,11 +36,12 @@ pub enum DownloadError {
 pub async fn download(
 	uuid: String,
 	_req: Request<Body>,
-	db: Arc<DB>,
+	db: SqlitePool,
 ) -> Result<Response<Body>, DownloadError> {
 	let uuid = Uuid::parse_str(&uuid)?;
 	debug!("Downloading {}", uuid);
 
+	let db = db.acquire().await?;
 	let mut file_entry: FileEntry =
 		bincode::deserialize(&db.get(uuid.as_bytes())?.ok_or(DownloadError::NotFound)?)?;
 

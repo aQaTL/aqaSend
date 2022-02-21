@@ -6,6 +6,7 @@ use bytes::{Buf, BufMut, BytesMut};
 use futures::StreamExt;
 use hyper::{Body, Request, Response, StatusCode};
 use log::*;
+use sqlx::SqlitePool;
 use rocksdb::DB;
 use thiserror::Error;
 use tokio::io::AsyncWriteExt;
@@ -32,12 +33,12 @@ pub enum UploadError {
 	#[error(transparent)]
 	AqaHeader(#[from] HeaderError),
 	#[error(transparent)]
-	Db(#[from] rocksdb::Error),
+	Db(#[from] sqlx::Error),
 	#[error(transparent)]
 	DbSerialize(#[from] bincode::Error),
 }
 
-pub async fn upload(req: Request<Body>, db: Arc<DB>) -> Result<Response<Body>, UploadError> {
+pub async fn upload(req: Request<Body>, db: SqlitePool) -> Result<Response<Body>, UploadError> {
 	use UploadError::{BoundaryExpected, FileCreate, FileWrite, InvalidContentType};
 
 	let (parts, body) = req.into_parts();

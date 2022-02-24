@@ -29,10 +29,20 @@ My clone of Firefox Send.
 ## Database
 
 - For files, we probably don't need a database
-	- But it might be a good idea to use sqlite for accounts and/or file tracking
+    - But it might be a good idea to use sqlite for accounts and/or file tracking
 - Files will be stored on disk
 - Group the files in directories based on their storage options
     - So, have directories for files that should be deleted after an hour, day, 1 or 10 downloads
+
+
+### HDD - HashMap Dump Database
+
+For my personal needs, I don't think I need a full database and can manage my data set just fine
+by straight-up loading it into a HashMap.
+
+Dealing with threading.
+
+Well, 
 
 # Messaging protocol
 

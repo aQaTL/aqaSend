@@ -32,7 +32,7 @@ struct DbView {
 }
 
 impl DbView {
-    pub fn
+
 }
 
 fn load_db(db_file: &Path) -> Result<Db, DbError> {

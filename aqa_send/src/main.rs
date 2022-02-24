@@ -25,8 +25,10 @@ use sqlx::{ConnectOptions, SqliteConnection, SqlitePool};
 use thiserror::Error;
 use tokio::time::Instant;
 use uuid::Uuid;
+use crate::db::DbHandle;
 
 mod account;
+mod db;
 mod db_stuff;
 mod download;
 mod headers;
@@ -41,9 +43,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 	let db_dir: PathBuf = init_app_directory_structure()?;
 
-	let connection_pool = init_db(&db_dir).await?;
+	let db_handle = db::init(&db_dir).await?;
 
-	tokio::spawn(cleanup_task(connection_pool.clone()));
+	tokio::spawn(cleanup_task(db_handle.clone()));
 
 	#[cfg(not(target_os = "linux"))]
 	let servers = {
@@ -75,7 +77,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 	join_all(servers.into_iter().map(|server| {
 		server.serve(make_service_fn(|_addr_stream| {
-			let db = connection_pool;
+			let db = db_handle;
 			ready(Result::<AqaService, AqaServiceError>::Ok(AqaService { db }))
 		}))
 	}))
@@ -118,38 +120,6 @@ fn init_app_directory_structure() -> Result<PathBuf, InitAppFolderStructureError
 }
 
 const ROCKSDB_DIR: &str = "index_db";
-
-#[derive(Debug, Error)]
-enum InitDbError {
-	#[error("Database path contains invalid unicode characters")]
-	InvalidUnicodeInPath,
-	#[error("Failed to create SqliteConnectOptions: {0:?}")]
-	ParseSqliteUrl(sqlx::Error),
-	#[error("Failed to connect to Sqlite: {0:?}")]
-	DbConnect(sqlx::Error),
-	#[error(transparent)]
-	DbMigration(#[from] sqlx::migrate::MigrateError),
-}
-
-async fn init_db(db_dir: &Path) -> Result<SqlitePool, InitDbError> {
-	let db_file = db_dir.join("db");
-	let connection_url = format!(
-		"sqlite://{}",
-		db_file.to_str().ok_or(InitDbError::InvalidUnicodeInPath)?
-	);
-	let connect_options =
-		SqliteConnectOptions::from_str(&connection_url).map_err(InitDbError::ParseSqliteUrl)?;
-	let connection_pool: SqlitePool = SqlitePoolOptions::new()
-		.connect_with(connect_options)
-		.await
-		.map_err(DbConnect)?;
-
-	sqlx::migrate!("./db_migration")
-		.run(&connection_pool)
-		.await?;
-
-	Ok(connection_pool)
-}
 
 async fn cleanup_task(db: SqlitePool) {
 // 	let mut cleanup_tick = tokio::time::interval_at(
@@ -211,7 +181,7 @@ async fn cleanup_task(db: SqlitePool) {
 }
 
 pub struct AqaService {
-	db: SqlitePool,
+	db: DbHandle,
 }
 
 #[derive(Debug, Error)]

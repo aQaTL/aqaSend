@@ -1,11 +1,10 @@
 use crate::FileEntry;
 use hyper::{Body, Request, Response, StatusCode};
-use rocksdb::{IteratorMode, DB};
 use serde::Serialize;
-use std::sync::Arc;
-use sqlx::SqlitePool;
 use thiserror::Error;
 use uuid::Uuid;
+
+use crate::db::Db;
 
 #[derive(Debug, Error)]
 pub enum ListError {
@@ -16,24 +15,28 @@ pub enum ListError {
 }
 
 #[derive(Serialize)]
-struct FileModel {
-	id: Uuid,
+struct FileModel<'a> {
+	id: &'a Uuid,
 	#[serde(flatten)]
-	file_entry: FileEntry,
+	file_entry: &'a FileEntry,
 }
 
-pub async fn list(_req: Request<Body>, db: SqlitePool) -> Result<Response<Body>, ListError> {
+pub async fn list(_req: Request<Body>, db: Db) -> Result<Response<Body>, ListError> {
 	let list: Vec<FileModel> = db
-		.iterator(IteratorMode::Start)
-		.map(|(key, value)| {
-			(
-				Uuid::from_slice(&key).unwrap(),
-				bincode::deserialize(&value),
-			)
-		})
-		.filter_map(|(id, file_entry)| match file_entry {
-			Ok(file_entry) => Some(FileModel { id, file_entry }),
-			Err(_) => None,
+		.iter()
+		// .map(|(key, value)| {
+		// 	(
+		// 		Uuid::from_slice(&key).unwrap(),
+		// 		bincode::deserialize(&value),
+		// 	)
+		// })
+		// .map(|(id, file_entry)| match file_entry {
+		// 	Ok(file_entry) => Some(FileModel { id: id.clone(), file_entry: file_entry.to_owned() }),
+		// 	Err(_) => None,
+		// })
+		.map(|(key, value)| FileModel {
+			id: key,
+			file_entry: value,
 		})
 		.collect();
 

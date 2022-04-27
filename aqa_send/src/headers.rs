@@ -30,7 +30,7 @@ pub enum HeaderError {
 	DownloadCountInvalidCount,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum Visibility {
 	Public,
 	Private,
@@ -54,7 +54,7 @@ impl Default for DownloadCount {
 	}
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum Password {
 	None,
 	Some(String),
@@ -66,7 +66,7 @@ impl Default for Password {
 	}
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum Lifetime {
 	Infinite,
 	Duration(std::time::Duration),

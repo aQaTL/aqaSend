@@ -1,21 +1,20 @@
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use bytes::{Bytes, BytesMut};
 use futures::Stream;
 use hyper::{Body, Request, Response};
 use log::*;
-use sqlx::SqlitePool;
 use thiserror::Error;
 use tokio::io::AsyncReadExt;
 use uuid::Uuid;
 
+use crate::db::Db;
 use crate::db_stuff::FileEntry;
 use crate::headers::DownloadCount;
-use crate::{StatusCode, DB_DIR};
+use crate::{db, StatusCode, DB_DIR};
 
 #[derive(Debug, Error)]
 pub enum DownloadError {
@@ -26,7 +25,7 @@ pub enum DownloadError {
 	#[error("File id is not a valid uuid")]
 	Uuid(#[from] uuid::Error),
 	#[error(transparent)]
-	Db(#[from] sqlx::Error),
+	Db(#[from] db::DbError),
 	#[error(transparent)]
 	Serialization(#[from] bincode::Error),
 	#[error(transparent)]
@@ -36,14 +35,12 @@ pub enum DownloadError {
 pub async fn download(
 	uuid: String,
 	_req: Request<Body>,
-	db: SqlitePool,
+	db: Db,
 ) -> Result<Response<Body>, DownloadError> {
 	let uuid = Uuid::parse_str(&uuid)?;
 	debug!("Downloading {}", uuid);
 
-	let db = db.acquire().await?;
-	let mut file_entry: FileEntry =
-		bincode::deserialize(&db.get(uuid.as_bytes())?.ok_or(DownloadError::NotFound)?)?;
+	let mut file_entry: FileEntry = db.get(&uuid)?.ok_or(DownloadError::NotFound)?;
 
 	if let DownloadCount::Count(max_count) = file_entry.download_count_type {
 		if file_entry.download_count >= max_count {
@@ -56,10 +53,10 @@ pub async fn download(
 		file_entry.download_count + 1
 	);
 	file_entry.download_count += 1;
-	db.put(&uuid.as_bytes(), bincode::serialize(&file_entry)?)?;
+	db.put(&uuid, file_entry.clone())?;
 
 	// Make it immutable to prevent unsaved changes
-	let file_entry = file_entry;
+	// let file_entry = file_entry;
 
 	let file_path: PathBuf = [
 		DB_DIR,

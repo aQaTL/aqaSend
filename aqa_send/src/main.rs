@@ -1,31 +1,20 @@
-extern crate core;
-
 use futures::future::join_all;
 use std::error::Error;
 use std::future::{ready, Future};
 use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::pin::Pin;
-use std::str::FromStr;
-use std::sync::Arc;
 use std::task::{Context, Poll};
-use std::time::Duration;
 
-use crate::db::DbHandle;
+use crate::db::Db;
 use crate::db_stuff::FileEntry;
-use crate::download::DownloadError::Db;
-use crate::headers::{DownloadCount, Lifetime, DOWNLOAD_COUNT, LIFETIME, PASSWORD, VISIBILITY};
-use crate::InitDbError::DbConnect;
+use crate::headers::{DOWNLOAD_COUNT, LIFETIME, PASSWORD, VISIBILITY};
 use hyper::http::HeaderValue;
 use hyper::service::{make_service_fn, Service};
 use hyper::Server;
 use hyper::{Body, Method, Request, Response, StatusCode};
 use log::*;
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
-use sqlx::{ConnectOptions, SqliteConnection, SqlitePool};
 use thiserror::Error;
-use tokio::time::Instant;
-use uuid::Uuid;
 
 mod account;
 mod db;
@@ -77,7 +66,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 	join_all(servers.into_iter().map(|server| {
 		server.serve(make_service_fn(|_addr_stream| {
-			let db = db_handle;
+			let db = db_handle.clone();
 			ready(Result::<AqaService, AqaServiceError>::Ok(AqaService { db }))
 		}))
 	}))
@@ -109,7 +98,7 @@ fn init_app_directory_structure() -> Result<PathBuf, InitAppFolderStructureError
 	}
 
 	for dir in DIRS_BY_DOWNLOAD_COUNT {
-		let dir: PathBuf = db_dir.join(dir.to_string());
+		let dir: PathBuf = db_dir.join(dir);
 		if !dir.exists() {
 			std::fs::create_dir(&dir)?;
 		}
@@ -119,9 +108,7 @@ fn init_app_directory_structure() -> Result<PathBuf, InitAppFolderStructureError
 	Ok(db_dir)
 }
 
-const ROCKSDB_DIR: &str = "index_db";
-
-async fn cleanup_task(db: SqlitePool) {
+async fn cleanup_task(db: Db) {
 	// 	let mut cleanup_tick = tokio::time::interval_at(
 	// 		Instant::now() + Duration::from_secs(60),
 	// 		Duration::from_secs(60 * 60),
@@ -181,7 +168,7 @@ async fn cleanup_task(db: SqlitePool) {
 }
 
 pub struct AqaService {
-	db: DbHandle,
+	db: Db,
 }
 
 #[derive(Debug, Error)]

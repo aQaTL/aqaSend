@@ -1,13 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
-use uuid::Uuid;
+// use uuid::Uuid;
 
 use crate::headers::{DownloadCount, Lifetime, Password, Visibility};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct FileEntry {
-	uuid: Uuid,
-
+	// uuid: Uuid,
 	pub filename: String,
 	pub content_type: String,
 

@@ -1,17 +1,15 @@
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::SystemTime;
 
 use bytes::{Buf, BufMut, BytesMut};
 use futures::StreamExt;
 use hyper::{Body, Request, Response, StatusCode};
 use log::*;
-use sqlx::SqlitePool;
-use rocksdb::DB;
 use thiserror::Error;
 use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 
+use crate::db::{self, Db};
 use crate::db_stuff::FileEntry;
 use crate::headers::{DownloadCount, HeaderError, Lifetime, Password, Visibility, DOWNLOAD_COUNT};
 use crate::DB_DIR;
@@ -33,12 +31,12 @@ pub enum UploadError {
 	#[error(transparent)]
 	AqaHeader(#[from] HeaderError),
 	#[error(transparent)]
-	Db(#[from] sqlx::Error),
+	Db(#[from] db::DbError),
 	#[error(transparent)]
 	DbSerialize(#[from] bincode::Error),
 }
 
-pub async fn upload(req: Request<Body>, db: SqlitePool) -> Result<Response<Body>, UploadError> {
+pub async fn upload(req: Request<Body>, db: Db) -> Result<Response<Body>, UploadError> {
 	use UploadError::{BoundaryExpected, FileCreate, FileWrite, InvalidContentType};
 
 	let (parts, body) = req.into_parts();
@@ -102,7 +100,7 @@ pub async fn upload(req: Request<Body>, db: SqlitePool) -> Result<Response<Body>
 			lifetime: Lifetime::default(),
 			upload_date: SystemTime::now(),
 		};
-		db.put(&upload_uuid.as_bytes(), bincode::serialize(&file_entry)?)?;
+		db.put(&upload_uuid, file_entry.clone())?;
 
 		while let Some(chunk) = multipart.read_data().await {
 			let chunk = chunk?;

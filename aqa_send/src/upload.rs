@@ -9,7 +9,7 @@ use thiserror::Error;
 use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 
-use crate::db::{self, Db};
+use crate::db::Db;
 use crate::db_stuff::FileEntry;
 use crate::headers::{DownloadCount, HeaderError, Lifetime, Password, Visibility, DOWNLOAD_COUNT};
 use crate::DB_DIR;
@@ -30,8 +30,6 @@ pub enum UploadError {
 	BoundaryExpected,
 	#[error(transparent)]
 	AqaHeader(#[from] HeaderError),
-	#[error(transparent)]
-	Db(#[from] db::DbError),
 	#[error(transparent)]
 	DbSerialize(#[from] serde_json::Error),
 }
@@ -100,7 +98,7 @@ pub async fn upload(req: Request<Body>, db: Db) -> Result<Response<Body>, Upload
 			lifetime: Lifetime::default(),
 			upload_date: SystemTime::now(),
 		};
-		db.update(&upload_uuid, file_entry.clone()).await?;
+		db.put(upload_uuid, file_entry.clone()).await;
 
 		while let Some(chunk) = multipart.read_data().await {
 			let chunk = chunk?;

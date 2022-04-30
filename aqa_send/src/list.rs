@@ -22,7 +22,8 @@ struct FileModel<'a> {
 }
 
 pub async fn list(_req: Request<Body>, db: Db) -> Result<Response<Body>, ListError> {
-	let list: Vec<FileModel> = db
+	let db_reader = db.reader().await;
+	let list: Vec<FileModel> = db_reader
 		.iter()
 		// .map(|(key, value)| {
 		// 	(

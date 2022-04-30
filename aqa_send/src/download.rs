@@ -27,7 +27,7 @@ pub enum DownloadError {
 	#[error(transparent)]
 	Db(#[from] db::DbError),
 	#[error(transparent)]
-	Serialization(#[from] bincode::Error),
+	Serialization(#[from] serde_json::Error),
 	#[error(transparent)]
 	FileSendIo(std::io::Error),
 }
@@ -40,7 +40,11 @@ pub async fn download(
 	let uuid = Uuid::parse_str(&uuid)?;
 	debug!("Downloading {}", uuid);
 
-	let mut file_entry: FileEntry = db.get(&uuid)?.ok_or(DownloadError::NotFound)?;
+	let mut file_entry: FileEntry = db
+		.get(&uuid)
+		.await
+		.ok_or(DownloadError::NotFound)?
+		.to_owned();
 
 	if let DownloadCount::Count(max_count) = file_entry.download_count_type {
 		if file_entry.download_count >= max_count {
@@ -53,7 +57,7 @@ pub async fn download(
 		file_entry.download_count + 1
 	);
 	file_entry.download_count += 1;
-	db.put(&uuid, file_entry.clone())?;
+	db.update(&uuid, file_entry.clone()).await?;
 
 	// Make it immutable to prevent unsaved changes
 	// let file_entry = file_entry;

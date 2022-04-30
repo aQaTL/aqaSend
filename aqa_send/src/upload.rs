@@ -33,7 +33,7 @@ pub enum UploadError {
 	#[error(transparent)]
 	Db(#[from] db::DbError),
 	#[error(transparent)]
-	DbSerialize(#[from] bincode::Error),
+	DbSerialize(#[from] serde_json::Error),
 }
 
 pub async fn upload(req: Request<Body>, db: Db) -> Result<Response<Body>, UploadError> {
@@ -100,7 +100,7 @@ pub async fn upload(req: Request<Body>, db: Db) -> Result<Response<Body>, Upload
 			lifetime: Lifetime::default(),
 			upload_date: SystemTime::now(),
 		};
-		db.put(&upload_uuid, file_entry.clone())?;
+		db.update(&upload_uuid, file_entry.clone()).await?;
 
 		while let Some(chunk) = multipart.read_data().await {
 			let chunk = chunk?;

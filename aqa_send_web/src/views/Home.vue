@@ -23,7 +23,7 @@ export default defineComponent({
   data() {
     return {
       API_ENDPOINT: API_ENDPOINT,
-      counter: 9,
+      COUNTER: 9,
       fileEntries: [],
     }
   },

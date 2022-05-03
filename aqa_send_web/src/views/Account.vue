@@ -1,11 +1,18 @@
 <template>
-
+  <NButton>Foo</NButton>
 </template>
 
-<script>
-export default {
-  name: "Account"
-}
+<script lang="ts">
+import {defineComponent} from "vue";
+import {NButton} from "naive-ui";
+
+export default defineComponent({
+  name: "Account",
+
+  components: {
+    NButton,
+  }
+});
 </script>
 
 <style scoped>

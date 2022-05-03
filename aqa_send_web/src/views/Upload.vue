@@ -2,29 +2,35 @@
   <div id="uploadParams">
     <h2 class="lineAroundText">Parameters</h2>
     <div class="param">
-      <fieldset>
-        <legend>Visibility</legend>
-
-        <input type="radio" id="visibility-public" :value="Visibility.public" v-model="uploadParams.visibility">
-        <label for="visibility-public">Public</label>
-
-        <!-- TODO(aqatl): Allow only if logged in. Otherwise, grey it out -->
-        <input type="radio" id="visibility-private" :value="Visibility.private" v-model="uploadParams.visibility">
-        <label for="visibility-private">Private</label>
-      </fieldset>
+      <NSwitch
+          size="large"
+          :checked-value="Visibility.private"
+          :unchecked-value="Visibility.public"
+          :value="uploadParams.visibility"
+          @update:value="(v) => uploadParams.visibility = v"
+      >
+        <template #checked>
+          Private
+        </template>
+        <template #unchecked>
+          Public
+        </template>
+      </NSwitch>
     </div>
-    <div class="param">
+    <div class="param downloadCount">
       <span>Download count</span>
-      <select v-model="uploadParams.downloadCount">
-        <option value="1">1</option>
-        <option value="5">5</option>
-        <option value="10">10</option>
-        <option value="100">100</option>
-
-        <!-- TODO(aqatl): Display only if logged in -->
-        <option value="infinite">&infin;</option>
-      </select>
-      <span>Selected download count: {{ uploadParams.downloadCount }}</span>
+      <NSlider v-model:value="uploadParams.downloadCount" :marks="downloadCounts" step="mark" ></NSlider>
+      <span>Infinity download count toggle</span>
+      <NSwitch
+          size="large"
+        >
+        <template #checked>
+          Infinite
+        </template>
+        <template #unchecked>
+          {{ uploadParams.downloadCount }}
+        </template>
+      </NSwitch>
     </div>
     <div class="param">
       <span>Lifetime</span>
@@ -32,7 +38,15 @@
     </div>
     <div class="param">
       <span>Password</span>
-      <input type="password" placeholder="Leave empty for unprotected file" v-model="uploadParams.password">
+      <input type="password" placeholder="Leave empty for unprotected file"
+             v-model="uploadParams.password">
+      <NInput
+          type="password"
+          placeholder="Leave empty for unprotected file"
+          show-password-on="mousedown"
+          clearable
+        ></NInput>
+
     </div>
   </div>
   <div id="upload">
@@ -53,8 +67,15 @@
 <script lang="ts">
 import {defineComponent, ref} from "vue";
 import {API_ENDPOINT, uploadFile, UploadParams, Visibility} from "@/api";
+import {NSwitch, NSlider, NInput} from "naive-ui";
 
 export default defineComponent({
+  components: {
+    NSwitch,
+    NSlider,
+    NInput,
+  },
+
   setup() {
     const filePicker = ref<HTMLInputElement>()
     return {filePicker};
@@ -75,6 +96,13 @@ export default defineComponent({
         downloadCount: "1",
         password: "",
       } as UploadParams,
+
+      downloadCounts: {
+        1: "1",
+        5: "5",
+        10: "10",
+        100: "100",
+      }
     };
   },
 
@@ -198,6 +226,17 @@ export default defineComponent({
 
 .lineAroundText:after {
   margin-left: 10px;
+}
+
+.downloadCount {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 200px;
+}
+
+.downloadCount > .n-slider {
+  max-width: 500px;
 }
 
 </style>

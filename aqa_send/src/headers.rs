@@ -5,6 +5,8 @@ use hyper::http::HeaderValue;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::files::DIRS_BY_DOWNLOAD_COUNT;
+
 use crate::headers::HeaderError::DownloadCountParse;
 use crate::headers::Lifetime::Duration;
 
@@ -30,7 +32,7 @@ pub enum HeaderError {
 	DownloadCountInvalidCount,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Visibility {
 	Public,
 	Private,
@@ -42,7 +44,7 @@ impl Default for Visibility {
 	}
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub enum DownloadCount {
 	Infinite,
 	Count(u64),
@@ -54,7 +56,7 @@ impl Default for DownloadCount {
 	}
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Password {
 	None,
 	Some(String),
@@ -66,7 +68,7 @@ impl Default for Password {
 	}
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Lifetime {
 	Infinite,
 	Duration(std::time::Duration),
@@ -84,7 +86,7 @@ impl TryFrom<Option<&HeaderValue>> for DownloadCount {
 	fn try_from(v: Option<&HeaderValue>) -> Result<Self, Self::Error> {
 		let v = v.ok_or(HeaderError::DownloadCountHeaderMissing)?;
 		let v = v.to_str().map_err(|_| DownloadCountParse)?;
-		if !crate::DIRS_BY_DOWNLOAD_COUNT.contains(&v) {
+		if !DIRS_BY_DOWNLOAD_COUNT.contains(&v) {
 			return Err(HeaderError::DownloadCountInvalidCount);
 		}
 		if v == "infinite" {

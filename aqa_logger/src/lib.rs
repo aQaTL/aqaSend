@@ -1,16 +1,21 @@
-use log::{LevelFilter, Metadata, Record};
+use log::{LevelFilter, Metadata, Record, SetLoggerError};
 
 pub struct Logger;
 
 static LOGGER: Logger = Logger;
 
 pub fn init() {
-	log::set_logger(&LOGGER).expect("Tried to set global logger twice");
+	try_init().expect("Tried to set global logger twice");
+}
+
+pub fn try_init() -> Result<(), SetLoggerError> {
+	log::set_logger(&LOGGER)?;
 	if cfg!(debug_assertions) {
 		log::set_max_level(LevelFilter::Debug);
 	} else {
 		log::set_max_level(LevelFilter::Info);
 	}
+	Ok(())
 }
 
 static COLORS: [u32; 5] = [91, 31, 33, 36, 90];

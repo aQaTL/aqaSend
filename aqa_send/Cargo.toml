@@ -6,20 +6,30 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+aqa_logger = { path = "../aqa_logger" }
+
 hyper = { version = "0.14.16", features = ["server", "http1", "http2", "tcp", "stream"] }
-tokio = { version = "1.15.0", features = ["rt-multi-thread", "net", "macros", "fs"] }
+tokio = { version = "1.15.0", features = ["rt-multi-thread", "net", "macros", "fs", "tracing"] }
 futures = "0.3.19"
 log = "0.4.14"
 thiserror = "1.0.30"
-uuid = { version = "0.8.2", features = ["v4", "serde"] }
+uuid = { version = "1.1.2", features = ["v4", "serde"] }
 bytes = "1.1.0"
 serde = { version = "1.0.136", features = ["derive"] }
 serde_json = "1.0.78"
 ctrlc = { version = "3.2.2", features = ["termination"] }
-
-aqa_logger = { path = "../aqa_logger" }
+backtrace = "0.3.66"
+tracing = "0.1.36"
+tracing-subscriber = "0.3.15"
+console-subscriber = "0.1.8"
+tracing-appender = "0.2.2"
 
 [target.'cfg(target_os = "linux")'.dependencies.systemd-socket-activation]
 features = ["dlopen"]
 git = "https://github.com/aQaTL/systemd-socket-activation.git"
 tag = "v1.1.0"
+
+[dev-dependencies]
+anyhow = "1.0"
+rand = "0.8.5"
+tempfile = "3.3.0"

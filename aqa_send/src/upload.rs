@@ -1,10 +1,10 @@
-use std::path::PathBuf;
 use std::time::SystemTime;
 
 use bytes::{Buf, BufMut, BytesMut};
 use futures::StreamExt;
 use hyper::{Body, Request, Response, StatusCode};
 use log::*;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
@@ -12,7 +12,6 @@ use uuid::Uuid;
 use crate::db::Db;
 use crate::db_stuff::FileEntry;
 use crate::headers::{DownloadCount, HeaderError, Lifetime, Password, Visibility, DOWNLOAD_COUNT};
-use crate::DB_DIR;
 
 #[derive(Debug, Error)]
 pub enum UploadError {
@@ -34,6 +33,16 @@ pub enum UploadError {
 	DbSerialize(#[from] serde_json::Error),
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct UploadResponse(pub Vec<UploadedFile>);
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UploadedFile {
+	pub uuid: Uuid,
+	pub filename: String,
+}
+
+#[tracing::instrument]
 pub async fn upload(req: Request<Body>, db: Db) -> Result<Response<Body>, UploadError> {
 	use UploadError::{BoundaryExpected, FileCreate, FileWrite, InvalidContentType};
 
@@ -62,7 +71,7 @@ pub async fn upload(req: Request<Body>, db: Db) -> Result<Response<Body>, Upload
 		buf: BytesMut::default(),
 	};
 
-	let mut uploaded_files_info = Vec::new();
+	let mut uploaded_files: Vec<UploadedFile> = Vec::new();
 
 	loop {
 		let header = match multipart.read_header().await {
@@ -73,13 +82,10 @@ pub async fn upload(req: Request<Body>, db: Db) -> Result<Response<Body>, Upload
 		info!("Uploading {}", header.file_name);
 
 		let upload_uuid = Uuid::new_v4();
-		let path: PathBuf = [
-			DB_DIR,
-			&download_count.to_string(),
-			&upload_uuid.to_string(),
-		]
-		.into_iter()
-		.collect();
+
+		let mut path = db.config.db_path.clone();
+		path.push(download_count.to_string());
+		path.push(upload_uuid.to_string());
 
 		let mut file = tokio::fs::File::create(path).await.map_err(FileCreate)?;
 
@@ -104,24 +110,24 @@ pub async fn upload(req: Request<Body>, db: Db) -> Result<Response<Body>, Upload
 			let chunk = chunk?;
 			file.write_all(&chunk).await.map_err(FileWrite)?;
 		}
-		uploaded_files_info.push((upload_uuid, file_entry));
-	}
 
-	Ok(Response::builder().status(StatusCode::OK).body(
-		format!(
-			"Hello from aqaSend upload.\n{}",
-			uploaded_files_info
-				.into_iter()
-				.map(|(uuid, file_entry)| format!(
-					"Your file id: {}.\n\"{}\" uploaded successfully.\n",
-					uuid, file_entry.filename,
-				))
-				.collect::<String>(),
-		)
-		.into(),
-	)?)
+		uploaded_files.push(UploadedFile {
+			uuid: upload_uuid,
+			filename: file_entry.filename,
+		});
+	}
+	debug!("uploaded: {uploaded_files:?}");
+
+	let upload_response = UploadResponse(uploaded_files);
+	let upload_response_json =
+		tokio::task::block_in_place(|| serde_json::to_vec_pretty(&upload_response))?;
+
+	Ok(Response::builder()
+		.status(StatusCode::OK)
+		.body(Body::from(upload_response_json))?)
 }
 
+#[derive(Debug)]
 pub struct Multipart {
 	body: Body,
 	boundary: String,
@@ -158,6 +164,7 @@ pub enum MultipartError {
 }
 
 impl Multipart {
+	#[tracing::instrument]
 	pub async fn read_header(&mut self) -> Result<MultipartHeader, MultipartError> {
 		use MultipartError::*;
 
@@ -260,6 +267,7 @@ impl Multipart {
 		})
 	}
 
+	#[tracing::instrument]
 	pub async fn read_data(&mut self) -> Option<Result<BytesMut, MultipartError>> {
 		if self.buf.is_empty() {
 			match self.body.next().await {

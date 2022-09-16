@@ -8,14 +8,19 @@ use thiserror::Error;
 use tokio::sync::{OwnedRwLockReadGuard, OwnedRwLockWriteGuard, RwLock};
 use uuid::Uuid;
 
-use crate::FileEntry;
+use crate::files::InitAppFolderStructureError;
+use crate::{files, FileEntry, DB_DIR};
 
 const DB_FILE: &str = "index";
 
-pub fn init(db_dir: &Path) -> Result<Db, DbError> {
-	let db_file_path = db_dir.join(DB_FILE);
+pub fn init(working_dir: &Path) -> Result<Db, DbError> {
+	files::init_app_directory_structure(working_dir)?;
+
+	let db_path = working_dir.join(DB_DIR);
+	let db_file_path = db_path.join(DB_FILE);
 
 	let db_config = Box::leak(Box::new(DbConfig {
+		db_path,
 		db_file_path: db_file_path.clone(),
 	}));
 
@@ -24,7 +29,7 @@ pub fn init(db_dir: &Path) -> Result<Db, DbError> {
 		File::create(&db_file_path).map_err(DbError::DbFileOperation)?;
 		return Ok(Db {
 			data: Default::default(),
-			db_config,
+			config: db_config,
 		});
 	}
 
@@ -33,12 +38,15 @@ pub fn init(db_dir: &Path) -> Result<Db, DbError> {
 
 	Ok(Db {
 		data: Arc::new(RwLock::new(db)),
-		db_config,
+		config: db_config,
 	})
 }
 
 #[derive(Debug, Error)]
 pub enum DbError {
+	#[error(transparent)]
+	DirectoryInit(#[from] InitAppFolderStructureError),
+
 	#[error(transparent)]
 	DbFileOperation(#[from] io::Error),
 
@@ -51,16 +59,17 @@ pub enum DbError {
 
 pub type DbDataHM = HashMap<Uuid, FileEntry>;
 
+#[derive(Debug)]
 pub struct Db {
 	data: Arc<RwLock<DbDataHM>>,
-	db_config: &'static DbConfig,
+	pub config: &'static DbConfig,
 }
 
 impl Clone for Db {
 	fn clone(&self) -> Self {
 		Db {
 			data: Arc::clone(&self.data),
-			db_config: self.db_config,
+			config: self.config,
 		}
 	}
 }
@@ -78,7 +87,6 @@ impl Db {
 		self.data.clone().write_owned().await
 	}
 
-	#[allow(dead_code)]
 	pub async fn put(&self, uuid: Uuid, file_entry: FileEntry) {
 		self.data.write().await.insert(uuid, file_entry);
 	}
@@ -96,13 +104,15 @@ impl Db {
 		let guard = self.data.read().await;
 		let hm: &DbDataHM = &*guard;
 
-		let mut file = File::create(&self.db_config.db_file_path)?;
+		let mut file = File::create(&self.config.db_file_path)?;
 		serde_json::to_writer(&mut file, hm)?;
 
 		Ok(())
 	}
 }
 
-struct DbConfig {
-	db_file_path: PathBuf,
+#[derive(Debug)]
+pub struct DbConfig {
+	pub db_path: PathBuf,
+	pub db_file_path: PathBuf,
 }

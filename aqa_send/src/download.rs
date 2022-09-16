@@ -11,10 +11,11 @@ use thiserror::Error;
 use tokio::io::AsyncReadExt;
 use uuid::Uuid;
 
-use crate::db::Db;
+use crate::db::{self, Db};
 use crate::db_stuff::FileEntry;
+use crate::files::DB_DIR;
 use crate::headers::DownloadCount;
-use crate::{db, StatusCode, DB_DIR};
+use crate::StatusCode;
 
 #[derive(Debug, Error)]
 pub enum DownloadError {

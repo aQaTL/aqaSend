@@ -4,7 +4,7 @@ use std::time::SystemTime;
 
 use crate::headers::{DownloadCount, Lifetime, Password, Visibility};
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FileEntry {
 	// uuid: Uuid,
 	pub filename: String,

@@ -185,3 +185,75 @@ Content-Type: text/plain\r\n\r\n\
 
 	Ok(())
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn file_gets_removed_after_10_download() -> Result<()> {
+	let mut test_server = TestServer::new()?;
+	test_server.start_cleanup_task(Duration::from_millis(10));
+
+	let file_contents = random_string(143);
+	let boundary = random_string(50);
+
+	let request = Request::builder()
+		.uri("/api/upload")
+		.method(Method::POST)
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.header("aqa-download-count", "10")
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"sample_file\"; filename=\"sample_file\"\r\n\
+Content-Type: text/plain\r\n\r\n\
+{}\r\n\
+--{boundary}--\r\n",
+			file_contents
+		)))?;
+
+	let mut response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::OK);
+
+	let response_bytes = to_bytes(response.body_mut()).await?;
+	let UploadResponse(uploaded_files) = serde_json::from_slice(&response_bytes)?;
+
+	assert_eq!(uploaded_files.len(), 1);
+	assert_eq!(uploaded_files[0].filename, "sample_file");
+
+	let uploaded_file_path = test_server
+		.db_dir
+		.path()
+		.join(DB_DIR)
+		.join("10")
+		.join(uploaded_files[0].uuid.to_string());
+
+	assert!(uploaded_file_path.exists());
+
+	for _ in 0..10 {
+		let request = Request::builder()
+			.uri(format!("/api/download/{}", uploaded_files[0].uuid))
+			.method(Method::GET)
+			.body(Body::empty())?;
+
+		let mut response = test_server.process_request(request).await?;
+		assert_eq!(response.status(), StatusCode::OK);
+
+		let response_bytes = to_bytes(response.body_mut()).await?;
+		assert_eq!(file_contents.as_bytes(), response_bytes.as_ref());
+
+		assert!(uploaded_file_path.exists());
+	}
+
+	let request = Request::builder()
+		.uri(format!("/api/download/{}", uploaded_files[0].uuid))
+		.method(Method::GET)
+		.body(Body::empty())?;
+
+	let response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+
+	tokio::time::sleep(Duration::from_millis(20)).await;
+	assert!(!uploaded_file_path.exists());
+
+	Ok(())
+}

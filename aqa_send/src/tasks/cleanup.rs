@@ -1,10 +1,9 @@
 use log::{debug, error, info};
-use std::path::PathBuf;
 use std::time::Duration;
 use tokio::time::Instant;
 use uuid::Uuid;
 
-use crate::{Db, DownloadCount, Lifetime, DB_DIR};
+use crate::{Db, DownloadCount, Lifetime};
 
 /// Default cleanup interval is 1 hour
 pub const DEFAULT_CLEANUP_INTERVAL: Duration = Duration::from_secs(60 * 60);
@@ -27,7 +26,7 @@ pub async fn cleanup_task(db: Db, cleanup_interval: Duration, start_lag: Duratio
 				if file_entry.download_count >= max_count {
 					db_entries_to_delete.push(*uuid);
 
-					let mut file_path = PathBuf::from(DB_DIR);
+					let mut file_path = db.config.db_path.clone();
 					file_path.push(file_entry.download_count_type.to_string());
 					file_path.push(uuid.to_string());
 

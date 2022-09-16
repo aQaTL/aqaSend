@@ -1,5 +1,4 @@
 use std::future::Future;
-use std::path::PathBuf;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
@@ -13,7 +12,6 @@ use uuid::Uuid;
 
 use crate::db::{self, Db};
 use crate::db_stuff::FileEntry;
-use crate::files::DB_DIR;
 use crate::headers::DownloadCount;
 use crate::StatusCode;
 
@@ -63,13 +61,9 @@ pub async fn download(
 	// Make it immutable to prevent unsaved changes
 	// let file_entry = file_entry;
 
-	let file_path: PathBuf = [
-		DB_DIR,
-		&file_entry.download_count_type.to_string(),
-		&uuid.to_string(),
-	]
-	.into_iter()
-	.collect();
+	let mut file_path = db.config.db_path.clone();
+	file_path.push(file_entry.download_count_type.to_string());
+	file_path.push(uuid.to_string());
 
 	if !file_path.exists() {
 		return Err(DownloadError::NotFound);

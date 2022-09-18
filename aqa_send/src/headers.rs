@@ -100,10 +100,10 @@ impl TryFrom<&HeaderValue> for Password {
 	type Error = HeaderError;
 
 	fn try_from(v: &HeaderValue) -> Result<Self, Self::Error> {
-			Ok(Password(
-					v.to_str()
-						.map_err(|_| HeaderError::PasswordParse)?
-						.to_string(),
-				))
+		Ok(Password(
+			v.to_str()
+				.map_err(|_| HeaderError::PasswordParse)?
+				.to_string(),
+		))
 	}
 }

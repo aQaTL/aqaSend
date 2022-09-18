@@ -87,6 +87,8 @@ async fn upload_works() -> Result<()> {
 	let file_contents = random_string(143);
 	let boundary = random_string(50);
 
+	const DOWNLOAD_COUNT: &str = "1";
+
 	let request = Request::builder()
 		.uri("/api/upload")
 		.method(Method::POST)
@@ -94,7 +96,7 @@ async fn upload_works() -> Result<()> {
 			"Content-Type",
 			format!("multipart/form-data; boundary={boundary}"),
 		)
-		.header("aqa-download-count", "1")
+		.header("aqa-download-count", DOWNLOAD_COUNT)
 		.body(Body::from(format!(
 			"--{boundary}\r\n\
 Content-Disposition: form-data; name=\"sample_file\"; filename=\"sample_file\"\r\n\
@@ -117,7 +119,7 @@ Content-Type: text/plain\r\n\r\n\
 		.db_dir
 		.path()
 		.join(DB_DIR)
-		.join("1")
+		.join(DOWNLOAD_COUNT)
 		.join(uploaded_files[0].uuid.to_string());
 
 	let uploaded_file = fs::read_to_string(&path).await?;
@@ -134,6 +136,8 @@ async fn file_gets_removed_after_1_download() -> Result<()> {
 	let file_contents = random_string(143);
 	let boundary = random_string(50);
 
+	const DOWNLOAD_COUNT: &str = "1";
+
 	let request = Request::builder()
 		.uri("/api/upload")
 		.method(Method::POST)
@@ -141,7 +145,7 @@ async fn file_gets_removed_after_1_download() -> Result<()> {
 			"Content-Type",
 			format!("multipart/form-data; boundary={boundary}"),
 		)
-		.header("aqa-download-count", "1")
+		.header("aqa-download-count", DOWNLOAD_COUNT)
 		.body(Body::from(format!(
 			"--{boundary}\r\n\
 Content-Disposition: form-data; name=\"sample_file\"; filename=\"sample_file\"\r\n\
@@ -164,7 +168,7 @@ Content-Type: text/plain\r\n\r\n\
 		.db_dir
 		.path()
 		.join(DB_DIR)
-		.join("1")
+		.join(DOWNLOAD_COUNT)
 		.join(uploaded_files[0].uuid.to_string());
 
 	assert!(uploaded_file_path.exists());
@@ -194,6 +198,8 @@ async fn file_gets_removed_after_10_download() -> Result<()> {
 	let file_contents = random_string(143);
 	let boundary = random_string(50);
 
+	const DOWNLOAD_COUNT: &str = "10";
+
 	let request = Request::builder()
 		.uri("/api/upload")
 		.method(Method::POST)
@@ -201,7 +207,7 @@ async fn file_gets_removed_after_10_download() -> Result<()> {
 			"Content-Type",
 			format!("multipart/form-data; boundary={boundary}"),
 		)
-		.header("aqa-download-count", "10")
+		.header("aqa-download-count", DOWNLOAD_COUNT)
 		.body(Body::from(format!(
 			"--{boundary}\r\n\
 Content-Disposition: form-data; name=\"sample_file\"; filename=\"sample_file\"\r\n\
@@ -224,7 +230,7 @@ Content-Type: text/plain\r\n\r\n\
 		.db_dir
 		.path()
 		.join(DB_DIR)
-		.join("10")
+		.join(DOWNLOAD_COUNT)
 		.join(uploaded_files[0].uuid.to_string());
 
 	assert!(uploaded_file_path.exists());
@@ -254,6 +260,76 @@ Content-Type: text/plain\r\n\r\n\
 
 	tokio::time::sleep(Duration::from_millis(20)).await;
 	assert!(!uploaded_file_path.exists());
+
+	Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn file_protected_by_password() -> Result<()> {
+	let mut test_server = TestServer::new()?;
+
+	let file_contents = random_string(143);
+	let boundary = random_string(50);
+
+	const DOWNLOAD_COUNT: &str = "1";
+	const PASSWORD: &str = "alamakota";
+
+	let request = Request::builder()
+		.uri("/api/upload")
+		.method(Method::POST)
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.header("aqa-download-count", DOWNLOAD_COUNT)
+		.header("aqa-password", PASSWORD)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"sample_file\"; filename=\"sample_file\"\r\n\
+Content-Type: text/plain\r\n\r\n\
+{}\r\n\
+--{boundary}--\r\n",
+			file_contents
+		)))?;
+
+	let mut response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::OK);
+
+	let response_bytes = to_bytes(response.body_mut()).await?;
+	let UploadResponse(uploaded_files) = serde_json::from_slice(&response_bytes)?;
+
+	assert_eq!(uploaded_files.len(), 1);
+	assert_eq!(uploaded_files[0].filename, "sample_file");
+
+	let uploaded_file_path = test_server
+		.db_dir
+		.path()
+		.join(DB_DIR)
+		.join(DOWNLOAD_COUNT)
+		.join(uploaded_files[0].uuid.to_string());
+
+	assert!(uploaded_file_path.exists());
+
+	let request = Request::builder()
+		.uri(format!("/api/download/{}", uploaded_files[0].uuid))
+		.method(Method::GET)
+		.body(Body::empty())?;
+
+	let response = test_server.process_request(request).await?;
+	// assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+	assert_ne!(response.status(), StatusCode::OK);
+
+	let request = Request::builder()
+		.uri(format!("/api/download/{}", uploaded_files[0].uuid))
+		.method(Method::GET)
+		.header("aqa-password", PASSWORD)
+		.body(Body::empty())?;
+
+	let mut response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::OK);
+
+	let response_bytes = to_bytes(response.body_mut()).await?;
+	assert_eq!(file_contents.as_bytes(), response_bytes.as_ref());
 
 	Ok(())
 }

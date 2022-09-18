@@ -14,7 +14,7 @@ pub struct FileEntry {
 	pub download_count: u64,
 
 	pub visibility: Visibility,
-	pub password: Password,
+	pub password: Option<Password>,
 
 	pub lifetime: Lifetime,
 	pub upload_date: SystemTime,

@@ -7,7 +7,6 @@ use thiserror::Error;
 
 use crate::files::DIRS_BY_DOWNLOAD_COUNT;
 
-use crate::headers::HeaderError::DownloadCountParse;
 use crate::headers::Lifetime::Duration;
 
 pub const VISIBILITY: &str = "aqa-visibility";
@@ -21,8 +20,6 @@ pub enum HeaderError {
 	VisibilityHeaderMissing,
 	#[error("aqa-download-count header missing")]
 	DownloadCountHeaderMissing,
-	#[error("aqa-password header missing")]
-	PasswordHeaderMissing,
 	#[error("aqa-lifetime header missing")]
 	LifetimeHeaderMissing,
 
@@ -30,6 +27,8 @@ pub enum HeaderError {
 	DownloadCountParse,
 	#[error("Unsupported download count")]
 	DownloadCountInvalidCount,
+	#[error("Invalid aqa-password header value")]
+	PasswordParse,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,16 +56,7 @@ impl Default for DownloadCount {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Password {
-	None,
-	Some(String),
-}
-
-impl Default for Password {
-	fn default() -> Self {
-		Password::None
-	}
-}
+pub struct Password(String);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Lifetime {
@@ -85,7 +75,7 @@ impl TryFrom<Option<&HeaderValue>> for DownloadCount {
 
 	fn try_from(v: Option<&HeaderValue>) -> Result<Self, Self::Error> {
 		let v = v.ok_or(HeaderError::DownloadCountHeaderMissing)?;
-		let v = v.to_str().map_err(|_| DownloadCountParse)?;
+		let v = v.to_str().map_err(|_| HeaderError::DownloadCountParse)?;
 		if !DIRS_BY_DOWNLOAD_COUNT.contains(&v) {
 			return Err(HeaderError::DownloadCountInvalidCount);
 		}
@@ -103,5 +93,17 @@ impl std::fmt::Display for DownloadCount {
 			DownloadCount::Infinite => write!(f, "infinite"),
 			DownloadCount::Count(count) => write!(f, "{}", count),
 		}
+	}
+}
+
+impl TryFrom<&HeaderValue> for Password {
+	type Error = HeaderError;
+
+	fn try_from(v: &HeaderValue) -> Result<Self, Self::Error> {
+			Ok(Password(
+					v.to_str()
+						.map_err(|_| HeaderError::PasswordParse)?
+						.to_string(),
+				))
 	}
 }

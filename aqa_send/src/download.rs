@@ -51,6 +51,8 @@ pub async fn download(
 		}
 	}
 
+	// if file_entry.password.clone()
+
 	debug!(
 		"Increasing download count to {}",
 		file_entry.download_count + 1

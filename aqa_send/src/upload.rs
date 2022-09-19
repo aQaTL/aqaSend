@@ -65,7 +65,11 @@ pub async fn upload(req: Request<Body>, db: Db) -> Result<Response<Body>, Upload
 	debug!("Boundary: {}", boundary);
 
 	let download_count: DownloadCount = parts.headers.get(DOWNLOAD_COUNT).try_into()?;
-	let password: Option<Password> = parts.headers.get(PASSWORD).map(TryInto::try_into())?;
+	let password: Option<Password> = parts
+		.headers
+		.get(PASSWORD)
+		.map(|v| v.try_into())
+		.transpose()?;
 
 	let mut multipart = Multipart {
 		body,

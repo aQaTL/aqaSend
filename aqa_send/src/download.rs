@@ -12,28 +12,32 @@ use uuid::Uuid;
 
 use crate::db::{self, Db};
 use crate::db_stuff::FileEntry;
-use crate::headers::DownloadCount;
-use crate::StatusCode;
+use crate::headers::{DownloadCount, Password};
+use crate::{StatusCode, PASSWORD};
 
 #[derive(Debug, Error)]
 pub enum DownloadError {
 	#[error(transparent)]
+	FileSendIo(std::io::Error),
+	#[error(transparent)]
 	Http(#[from] hyper::http::Error),
-	#[error("File id not found or not present")]
-	NotFound,
 	#[error("File id is not a valid uuid")]
 	Uuid(#[from] uuid::Error),
 	#[error(transparent)]
-	Db(#[from] db::DbError),
-	#[error(transparent)]
 	Serialization(#[from] serde_json::Error),
+
 	#[error(transparent)]
-	FileSendIo(std::io::Error),
+	Db(#[from] db::DbError),
+
+	#[error("File id not found or not present")]
+	NotFound,
+	#[error("Invalid password")]
+	InvalidPassword,
 }
 
 pub async fn download(
 	uuid: String,
-	_req: Request<Body>,
+	req: Request<Body>,
 	db: Db,
 ) -> Result<Response<Body>, DownloadError> {
 	let uuid = Uuid::parse_str(&uuid)?;
@@ -45,13 +49,21 @@ pub async fn download(
 		.ok_or(DownloadError::NotFound)?
 		.to_owned();
 
+	if let Some(Password(ref password)) = file_entry.password {
+		let provided_password = req
+			.headers()
+			.get(PASSWORD)
+			.ok_or(DownloadError::InvalidPassword)?;
+		if provided_password != password {
+			return Err(DownloadError::InvalidPassword);
+		}
+	}
+
 	if let DownloadCount::Count(max_count) = file_entry.download_count_type {
 		if file_entry.download_count >= max_count {
 			return Err(DownloadError::NotFound);
 		}
 	}
-
-	// if file_entry.password.clone()
 
 	debug!(
 		"Increasing download count to {}",

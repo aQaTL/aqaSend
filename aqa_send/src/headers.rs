@@ -56,7 +56,7 @@ impl Default for DownloadCount {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Password(String);
+pub struct Password(pub String);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Lifetime {
@@ -100,10 +100,9 @@ impl TryFrom<&HeaderValue> for Password {
 	type Error = HeaderError;
 
 	fn try_from(v: &HeaderValue) -> Result<Self, Self::Error> {
-		Ok(Password(
-			v.to_str()
-				.map_err(|_| HeaderError::PasswordParse)?
-				.to_string(),
-		))
+		v.to_str()
+			.map_err(|_| HeaderError::PasswordParse)
+			.map(ToString::to_string)
+			.map(Password)
 	}
 }

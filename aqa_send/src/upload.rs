@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::db::Db;
 use crate::db_stuff::FileEntry;
 use crate::headers::{DownloadCount, HeaderError, Lifetime, Password, Visibility, DOWNLOAD_COUNT};
-use crate::PASSWORD;
+use crate::{PASSWORD, VISIBILITY};
 
 #[derive(Debug, Error)]
 pub enum UploadError {
@@ -70,6 +70,7 @@ pub async fn upload(req: Request<Body>, db: Db) -> Result<Response<Body>, Upload
 		.get(PASSWORD)
 		.map(|v| v.try_into())
 		.transpose()?;
+	let visibility: Visibility = parts.headers.get(VISIBILITY).try_into()?;
 
 	let mut multipart = Multipart {
 		body,
@@ -104,7 +105,7 @@ pub async fn upload(req: Request<Body>, db: Db) -> Result<Response<Body>, Upload
 			download_count_type: download_count,
 			download_count: 0,
 
-			visibility: Visibility::default(),
+			visibility,
 			password: password.clone(),
 
 			lifetime: Lifetime::default(),

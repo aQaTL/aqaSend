@@ -16,8 +16,6 @@ pub const LIFETIME: &str = "aqa-lifetime";
 
 #[derive(Debug, Error)]
 pub enum HeaderError {
-	#[error("aqa-visibility header missing")]
-	VisibilityHeaderMissing,
 	#[error("aqa-download-count header missing")]
 	DownloadCountHeaderMissing,
 	#[error("aqa-lifetime header missing")]
@@ -29,9 +27,11 @@ pub enum HeaderError {
 	DownloadCountInvalidCount,
 	#[error("Invalid aqa-password header value")]
 	PasswordParse,
+	#[error("Invalid aqa-visibility header value")]
+	VisibilityParse,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum Visibility {
 	Public,
 	Private,
@@ -104,5 +104,17 @@ impl TryFrom<&HeaderValue> for Password {
 			.map_err(|_| HeaderError::PasswordParse)
 			.map(ToString::to_string)
 			.map(Password)
+	}
+}
+
+impl TryFrom<Option<&HeaderValue>> for Visibility {
+	type Error = HeaderError;
+
+	fn try_from(v: Option<&HeaderValue>) -> Result<Self, Self::Error> {
+		match v.map(|x| x.to_str()) {
+			Some(Ok("public")) | None => Ok(Visibility::Public),
+			Some(Ok("private")) => Ok(Visibility::Private),
+			_ => Err(HeaderError::VisibilityParse),
+		}
 	}
 }

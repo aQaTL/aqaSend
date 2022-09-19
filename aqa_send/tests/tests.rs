@@ -11,7 +11,7 @@ use tokio::fs;
 
 use aqa_send::files::DB_DIR;
 use aqa_send::upload::UploadResponse;
-use aqa_send::{db, tasks, AqaService, AqaServiceError};
+use aqa_send::{db, headers, list, tasks, AqaService, AqaServiceError};
 
 struct TestServer {
 	#[allow(dead_code)]
@@ -96,7 +96,7 @@ async fn upload_works() -> Result<()> {
 			"Content-Type",
 			format!("multipart/form-data; boundary={boundary}"),
 		)
-		.header("aqa-download-count", DOWNLOAD_COUNT)
+		.header(headers::DOWNLOAD_COUNT, DOWNLOAD_COUNT)
 		.body(Body::from(format!(
 			"--{boundary}\r\n\
 Content-Disposition: form-data; name=\"sample_file\"; filename=\"sample_file\"\r\n\
@@ -145,7 +145,7 @@ async fn file_gets_removed_after_1_download() -> Result<()> {
 			"Content-Type",
 			format!("multipart/form-data; boundary={boundary}"),
 		)
-		.header("aqa-download-count", DOWNLOAD_COUNT)
+		.header(headers::DOWNLOAD_COUNT, DOWNLOAD_COUNT)
 		.body(Body::from(format!(
 			"--{boundary}\r\n\
 Content-Disposition: form-data; name=\"sample_file\"; filename=\"sample_file\"\r\n\
@@ -207,7 +207,7 @@ async fn file_gets_removed_after_10_download() -> Result<()> {
 			"Content-Type",
 			format!("multipart/form-data; boundary={boundary}"),
 		)
-		.header("aqa-download-count", DOWNLOAD_COUNT)
+		.header(headers::DOWNLOAD_COUNT, DOWNLOAD_COUNT)
 		.body(Body::from(format!(
 			"--{boundary}\r\n\
 Content-Disposition: form-data; name=\"sample_file\"; filename=\"sample_file\"\r\n\
@@ -281,8 +281,8 @@ async fn file_protected_by_password() -> Result<()> {
 			"Content-Type",
 			format!("multipart/form-data; boundary={boundary}"),
 		)
-		.header("aqa-download-count", DOWNLOAD_COUNT)
-		.header("aqa-password", PASSWORD)
+		.header(headers::DOWNLOAD_COUNT, DOWNLOAD_COUNT)
+		.header(headers::PASSWORD, PASSWORD)
 		.body(Body::from(format!(
 			"--{boundary}\r\n\
 Content-Disposition: form-data; name=\"sample_file\"; filename=\"sample_file\"\r\n\
@@ -322,7 +322,7 @@ Content-Type: text/plain\r\n\r\n\
 	let request = Request::builder()
 		.uri(format!("/api/download/{}", uploaded_files[0].uuid))
 		.method(Method::GET)
-		.header("aqa-password", PASSWORD)
+		.header(headers::PASSWORD, PASSWORD)
 		.body(Body::empty())?;
 
 	let mut response = test_server.process_request(request).await?;
@@ -330,6 +330,67 @@ Content-Type: text/plain\r\n\r\n\
 
 	let response_bytes = to_bytes(response.body_mut()).await?;
 	assert_eq!(file_contents.as_bytes(), response_bytes.as_ref());
+
+	Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn private_file_not_present_on_listing() -> Result<()> {
+	let mut test_server = TestServer::new()?;
+
+	let file_contents = random_string(143);
+	let boundary = random_string(50);
+
+	const DOWNLOAD_COUNT: &str = "1";
+	const VISIBILITY: &str = "private";
+
+	let request = Request::builder()
+		.uri("/api/upload")
+		.method(Method::POST)
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.header(headers::DOWNLOAD_COUNT, DOWNLOAD_COUNT)
+		.header(headers::VISIBILITY, VISIBILITY)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"sample_file\"; filename=\"sample_file\"\r\n\
+Content-Type: text/plain\r\n\r\n\
+{}\r\n\
+--{boundary}--\r\n",
+			file_contents
+		)))?;
+
+	let mut response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::OK);
+
+	let response_bytes = to_bytes(response.body_mut()).await?;
+	let UploadResponse(uploaded_files) = serde_json::from_slice(&response_bytes)?;
+
+	assert_eq!(uploaded_files.len(), 1);
+	assert_eq!(uploaded_files[0].filename, "sample_file");
+
+	let uploaded_file_path = test_server
+		.db_dir
+		.path()
+		.join(DB_DIR)
+		.join(DOWNLOAD_COUNT)
+		.join(uploaded_files[0].uuid.to_string());
+
+	assert!(uploaded_file_path.exists());
+
+	let request = Request::builder()
+		.uri("/api/list.json")
+		.method(Method::GET)
+		.body(Body::empty())?;
+
+	let mut response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::OK);
+
+	let response_bytes = to_bytes(response.body_mut()).await?;
+	let list: Vec<list::OwnedFileModel> = serde_json::from_slice(&response_bytes)?;
+	assert_eq!(list.len(), 0);
 
 	Ok(())
 }

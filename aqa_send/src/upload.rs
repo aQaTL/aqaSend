@@ -1,10 +1,9 @@
-use std::time::SystemTime;
-
 use bytes::{Buf, BufMut, BytesMut};
 use futures::StreamExt;
 use hyper::{Body, Request, Response, StatusCode};
 use log::*;
 use serde::{Deserialize, Serialize};
+use std::time::SystemTime;
 use thiserror::Error;
 use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
@@ -12,7 +11,7 @@ use uuid::Uuid;
 use crate::db::Db;
 use crate::db_stuff::FileEntry;
 use crate::headers::{DownloadCount, HeaderError, Lifetime, Password, Visibility, DOWNLOAD_COUNT};
-use crate::{PASSWORD, VISIBILITY};
+use crate::{LIFETIME, PASSWORD, VISIBILITY};
 
 #[derive(Debug, Error)]
 pub enum UploadError {
@@ -71,6 +70,7 @@ pub async fn upload(req: Request<Body>, db: Db) -> Result<Response<Body>, Upload
 		.map(|v| v.try_into())
 		.transpose()?;
 	let visibility: Visibility = parts.headers.get(VISIBILITY).try_into()?;
+	let lifetime: Lifetime = parts.headers.get(LIFETIME).try_into()?;
 
 	let mut multipart = Multipart {
 		body,
@@ -108,7 +108,7 @@ pub async fn upload(req: Request<Body>, db: Db) -> Result<Response<Body>, Upload
 			visibility,
 			password: password.clone(),
 
-			lifetime: Lifetime::default(),
+			lifetime,
 			upload_date: SystemTime::now(),
 		};
 		db.put(upload_uuid, file_entry.clone()).await;

@@ -1,13 +1,12 @@
 #![allow(dead_code)]
 use std::fmt::Formatter;
+use std::time::Duration;
 
 use hyper::http::HeaderValue;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::files::DIRS_BY_DOWNLOAD_COUNT;
-
-use crate::headers::Lifetime::Duration;
 
 pub const VISIBILITY: &str = "aqa-visibility";
 pub const DOWNLOAD_COUNT: &str = "aqa-download-count";
@@ -20,6 +19,8 @@ pub enum HeaderError {
 	DownloadCountHeaderMissing,
 	#[error("aqa-lifetime header missing")]
 	LifetimeHeaderMissing,
+	#[error("Invalid aqa-lifetime header value. Possible values: [infinite|1 min|5 mins|1 hour|1 day|7 days|30 days]")]
+	LifetimeValue,
 
 	#[error("Invalid aqa-download-count header value")]
 	DownloadCountParse,
@@ -29,6 +30,8 @@ pub enum HeaderError {
 	PasswordParse,
 	#[error("Invalid aqa-visibility header value")]
 	VisibilityParse,
+	#[error("Invalid aqa-lifetime header value")]
+	LifetimeParse,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -58,15 +61,36 @@ impl Default for DownloadCount {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Password(pub String);
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub enum Lifetime {
 	Infinite,
-	Duration(std::time::Duration),
+	Duration(Duration),
 }
 
 impl Default for Lifetime {
 	fn default() -> Self {
-		Duration(std::time::Duration::from_secs(60 * 60)) // 1 hour
+		Lifetime::Duration(Duration::from_secs(60 * 60)) // 1 hour
+	}
+}
+
+impl TryFrom<Option<&HeaderValue>> for Lifetime {
+	type Error = HeaderError;
+
+	fn try_from(v: Option<&HeaderValue>) -> Result<Self, Self::Error> {
+		let v = match v {
+			Some(v) => v.to_str().map_err(|_| HeaderError::LifetimeParse)?,
+			None => return Ok(Lifetime::Infinite),
+		};
+		match v {
+			"infinite" => Ok(Lifetime::Infinite),
+			"1 min" => Ok(Lifetime::Duration(Duration::from_secs(60))),
+			"5 mins" => Ok(Lifetime::Duration(Duration::from_secs(60 * 5))),
+			"1 hour" => Ok(Lifetime::Duration(Duration::from_secs(60 * 60))),
+			"1 day" => Ok(Lifetime::Duration(Duration::from_secs(60 * 60 * 24))),
+			"7 days" => Ok(Lifetime::Duration(Duration::from_secs(60 * 60 * 24 * 7))),
+			"30 days" => Ok(Lifetime::Duration(Duration::from_secs(60 * 60 * 24 * 30))),
+			_ => Err(HeaderError::LifetimeValue),
+		}
 	}
 }
 

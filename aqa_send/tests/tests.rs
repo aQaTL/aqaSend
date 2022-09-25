@@ -10,6 +10,7 @@ use tempfile::TempDir;
 use tokio::fs;
 
 use aqa_send::files::DB_DIR;
+use aqa_send::headers::Lifetime;
 use aqa_send::upload::UploadResponse;
 use aqa_send::{db, headers, list, tasks, AqaService, AqaServiceError};
 
@@ -265,6 +266,67 @@ Content-Type: text/plain\r\n\r\n\
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn unlimited_download_count() -> Result<()> {
+	let mut test_server = TestServer::new()?;
+	test_server.start_cleanup_task(Duration::from_millis(10));
+
+	let file_contents = random_string(143);
+	let boundary = random_string(50);
+
+	const DOWNLOAD_COUNT: &str = "infinite";
+
+	let request = Request::builder()
+		.uri("/api/upload")
+		.method(Method::POST)
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.header(headers::DOWNLOAD_COUNT, DOWNLOAD_COUNT)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"sample_file\"; filename=\"sample_file\"\r\n\
+Content-Type: text/plain\r\n\r\n\
+{}\r\n\
+--{boundary}--\r\n",
+			file_contents
+		)))?;
+
+	let mut response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::OK);
+
+	let response_bytes = to_bytes(response.body_mut()).await?;
+	let UploadResponse(uploaded_files) = serde_json::from_slice(&response_bytes)?;
+
+	assert_eq!(uploaded_files.len(), 1);
+	assert_eq!(uploaded_files[0].filename, "sample_file");
+
+	let uploaded_file_path = test_server
+		.db_dir
+		.path()
+		.join(DB_DIR)
+		.join(DOWNLOAD_COUNT)
+		.join(uploaded_files[0].uuid.to_string());
+
+	assert!(uploaded_file_path.exists());
+
+	for _ in 0..9999 {
+		let request = Request::builder()
+			.uri(format!("/api/download/{}", uploaded_files[0].uuid))
+			.method(Method::GET)
+			.body(Body::empty())?;
+
+		let mut response = test_server.process_request(request).await?;
+		assert_eq!(response.status(), StatusCode::OK);
+
+		let response_bytes = to_bytes(response.body_mut()).await?;
+		assert_eq!(file_contents.as_bytes(), response_bytes.as_ref());
+	}
+
+	Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn file_protected_by_password() -> Result<()> {
 	let mut test_server = TestServer::new()?;
 
@@ -391,6 +453,160 @@ Content-Type: text/plain\r\n\r\n\
 	let response_bytes = to_bytes(response.body_mut()).await?;
 	let list: Vec<list::OwnedFileModel> = serde_json::from_slice(&response_bytes)?;
 	assert_eq!(list.len(), 0);
+
+	Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn file_gets_removed_after_lifetime_runs_out() -> Result<()> {
+	let mut test_server = TestServer::new()?;
+	test_server.start_cleanup_task(Duration::from_millis(10));
+
+	let file_contents = random_string(143);
+	let boundary = random_string(50);
+
+	const DOWNLOAD_COUNT: &str = "infinite";
+	const LIFETIME: &str = "1 min";
+
+	let request = Request::builder()
+		.uri("/api/upload")
+		.method(Method::POST)
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.header(headers::DOWNLOAD_COUNT, DOWNLOAD_COUNT)
+		.header(headers::LIFETIME, LIFETIME)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"sample_file\"; filename=\"sample_file\"\r\n\
+Content-Type: text/plain\r\n\r\n\
+{}\r\n\
+--{boundary}--\r\n",
+			file_contents
+		)))?;
+
+	let mut response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::OK);
+
+	let response_bytes = to_bytes(response.body_mut()).await?;
+	let UploadResponse(uploaded_files) = serde_json::from_slice(&response_bytes)?;
+
+	assert_eq!(uploaded_files.len(), 1);
+	assert_eq!(uploaded_files[0].filename, "sample_file");
+
+	let uploaded_file_path = test_server
+		.db_dir
+		.path()
+		.join(DB_DIR)
+		.join(DOWNLOAD_COUNT)
+		.join(uploaded_files[0].uuid.to_string());
+
+	assert!(uploaded_file_path.exists());
+
+	{
+		test_server
+			.db_handle
+			.writer()
+			.await
+			.get_mut(&uploaded_files[0].uuid)
+			.unwrap()
+			.lifetime = Lifetime::Duration(Duration::from_millis(400));
+	}
+
+	let start_time = std::time::SystemTime::now();
+	while start_time.elapsed()? < Duration::from_millis(400) {
+		tokio::time::sleep(Duration::from_millis(10)).await;
+		assert!(uploaded_file_path.exists());
+	}
+
+	tokio::time::sleep(Duration::from_millis(20)).await;
+	assert!(!uploaded_file_path.exists());
+
+	Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn cannot_download_file_after_500_ms() -> Result<()> {
+	let mut test_server = TestServer::new()?;
+	test_server.start_cleanup_task(Duration::from_secs(60 * 60));
+
+	let file_contents = random_string(143);
+	let boundary = random_string(50);
+
+	const DOWNLOAD_COUNT: &str = "infinite";
+	const LIFETIME: &str = "1 min";
+
+	let request = Request::builder()
+		.uri("/api/upload")
+		.method(Method::POST)
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.header(headers::DOWNLOAD_COUNT, DOWNLOAD_COUNT)
+		.header(headers::LIFETIME, LIFETIME)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"sample_file\"; filename=\"sample_file\"\r\n\
+Content-Type: text/plain\r\n\r\n\
+{}\r\n\
+--{boundary}--\r\n",
+			file_contents
+		)))?;
+
+	let mut response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::OK);
+
+	let response_bytes = to_bytes(response.body_mut()).await?;
+	let UploadResponse(uploaded_files) = serde_json::from_slice(&response_bytes)?;
+
+	assert_eq!(uploaded_files.len(), 1);
+	assert_eq!(uploaded_files[0].filename, "sample_file");
+
+	let uploaded_file_path = test_server
+		.db_dir
+		.path()
+		.join(DB_DIR)
+		.join(DOWNLOAD_COUNT)
+		.join(uploaded_files[0].uuid.to_string());
+
+	assert!(uploaded_file_path.exists());
+
+	{
+		test_server
+			.db_handle
+			.writer()
+			.await
+			.get_mut(&uploaded_files[0].uuid)
+			.unwrap()
+			.lifetime = Lifetime::Duration(Duration::from_millis(500));
+	}
+
+	let start_time = std::time::SystemTime::now();
+	while start_time.elapsed()? < Duration::from_millis(500) {
+		let request = Request::builder()
+			.uri(format!("/api/download/{}", uploaded_files[0].uuid))
+			.method(Method::GET)
+			.body(Body::empty())?;
+
+		let mut response = test_server.process_request(request).await?;
+		assert_eq!(response.status(), StatusCode::OK);
+
+		let response_bytes = to_bytes(response.body_mut()).await?;
+		assert_eq!(file_contents.as_bytes(), response_bytes.as_ref());
+	}
+
+	let request = Request::builder()
+		.uri(format!("/api/download/{}", uploaded_files[0].uuid))
+		.method(Method::GET)
+		.body(Body::empty())?;
+
+	let mut response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::OK);
+
+	let response_bytes = to_bytes(response.body_mut()).await?;
+	assert_eq!(file_contents.as_bytes(), response_bytes.as_ref());
 
 	Ok(())
 }

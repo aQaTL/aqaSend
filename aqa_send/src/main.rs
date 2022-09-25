@@ -7,16 +7,75 @@ use futures::future::join_all;
 use hyper::service::make_service_fn;
 use hyper::Server;
 use log::*;
+use thiserror::Error;
 use tokio::runtime::Runtime;
 
 use aqa_send::db::{self, DbError};
-use aqa_send::tasks;
+use aqa_send::db_stuff::AccountType;
 use aqa_send::tasks::cleanup::{DEFAULT_CLEANUP_INTERVAL, DEFAULT_START_LAG};
+use aqa_send::{create_account, tasks};
 use aqa_send::{AqaService, AqaServiceError};
+
+const USAGE: &str = r#"aqaSend
+
+USAGE:
+	aqa_send [COMMAND]
+
+COMMANDS:
+	help
+
+	create-account
+		--name [string]
+		--type ["admin"|"user"]
+"#;
+
+struct Args {
+	command: Option<Command>,
+}
+
+enum Command {
+	Help,
+	CreateAccount { name: String, acc_type: AccountType },
+}
+
+#[derive(Error, Debug)]
+#[error("Invalid command {0}. Run with `help` to see possible values.")]
+pub struct InvalidCommandError(String);
+
+fn parse_args() -> Result<Args, Box<dyn Error>> {
+	let mut args = pico_args::Arguments::from_env();
+
+	let command = match args.subcommand()?.as_deref() {
+		Some("help") => Some(Command::Help),
+		Some("create-account") => {
+			let name = args.value_from_str("--name")?;
+			let acc_type = args.value_from_str("--type")?;
+			Some(Command::CreateAccount { name, acc_type })
+		}
+		Some(cmd) => {
+			return Err(InvalidCommandError(cmd.to_string()).into());
+		}
+		None => None,
+	};
+
+	Ok(Args { command })
+}
 
 fn main() -> Result<(), Box<dyn Error>> {
 	aqa_logger::init();
 
+	let args = parse_args()?;
+
+	match args.command {
+		Some(Command::Help) => println!("{USAGE}"),
+		Some(Command::CreateAccount { name, acc_type }) => create_account(name, acc_type)?,
+		None => run()?,
+	}
+
+	Ok(())
+}
+
+fn run() -> Result<(), Box<dyn Error>> {
 	let tokio_runtime = Runtime::new().expect("Failed to build tokio Runtime");
 	let tokio_handle = tokio_runtime.handle().clone();
 

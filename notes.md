@@ -14,3 +14,17 @@
 
 # Server API
 
+# Accounts
+
+Authentication will be cookie based. Password will be stored as a hash. 
+
+# Account types 
+
+For now 2 account types:
+
+- [ ] Admin
+- [ ] User
+
+# Registration
+
+Admin can create a special, one use only, link to create a new account. 

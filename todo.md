@@ -1,3 +1,7 @@
 - [x] Write tests for time based entries
 - [x] Write test for infinite download count
 - [x] Implement Lifetime header parsing
+- [ ] Account types
+- [ ] Admin account
+- [ ] Cli command to create account
+- [ ] Log in page

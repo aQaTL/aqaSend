@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use std::time::SystemTime;
+use thiserror::Error;
 // use uuid::Uuid;
 
 use crate::headers::{DownloadCount, Lifetime, Password, Visibility};
@@ -18,4 +20,26 @@ pub struct FileEntry {
 
 	pub lifetime: Lifetime,
 	pub upload_date: SystemTime,
+}
+
+#[derive(Serialize, Deserialize, Debug, Copy, Clone)]
+pub enum AccountType {
+	Admin,
+	User,
+}
+
+#[derive(Error, Debug)]
+#[error("Possible account types: [admin|user]")]
+pub struct AccountTypeParseError;
+
+impl FromStr for AccountType {
+	type Err = AccountTypeParseError;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		match s {
+			"admin" => Ok(AccountType::Admin),
+			"user" => Ok(AccountType::User),
+			_ => Err(AccountTypeParseError),
+		}
+	}
 }

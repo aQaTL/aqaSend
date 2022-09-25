@@ -3,7 +3,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use crate::db::Db;
-use crate::db_stuff::FileEntry;
+use crate::db_stuff::{AccountType, FileEntry};
 use crate::files::DB_DIR;
 use crate::headers::{DownloadCount, Lifetime, DOWNLOAD_COUNT, LIFETIME, PASSWORD, VISIBILITY};
 
@@ -143,6 +143,13 @@ async fn hello(_req: Request<Body>) -> Result<Response<Body>, AqaServiceError> {
 
 pub fn split_uri_path(path: &str) -> impl Iterator<Item = &str> {
 	path.split('/').filter(|segment| !segment.is_empty())
+}
+
+#[derive(Error, Debug)]
+pub enum CreateAccountError {}
+
+pub fn create_account(_name: String, _acc_type: AccountType) -> Result<(), CreateAccountError> {
+	unimplemented!()
 }
 
 #[cfg(test)]

@@ -11,6 +11,7 @@ pub struct FileEntry {
 	// uuid: Uuid,
 	pub filename: String,
 	pub content_type: String,
+	pub uploader_username: Option<String>,
 
 	pub download_count_type: DownloadCount,
 	pub download_count: u64,
@@ -20,6 +21,13 @@ pub struct FileEntry {
 
 	pub lifetime: Lifetime,
 	pub upload_date: SystemTime,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Account {
+	//username: String,
+	pub password_hash: String,
+	pub acc_type: AccountType,
 }
 
 #[derive(Serialize, Deserialize, Debug, Copy, Clone)]

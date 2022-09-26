@@ -68,7 +68,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 	match args.command {
 		Some(Command::Help) => println!("{USAGE}"),
-		Some(Command::CreateAccount { name, acc_type }) => create_account(name, acc_type)?,
+		Some(Command::CreateAccount { name, acc_type }) => Runtime::new()
+			.expect("Failed to build tokio Runtime")
+			.block_on(create_account(name, acc_type))?,
 		None => run()?,
 	}
 

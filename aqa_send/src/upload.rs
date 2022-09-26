@@ -101,6 +101,7 @@ pub async fn upload(req: Request<Body>, db: Db) -> Result<Response<Body>, Upload
 			content_type: header
 				.content_type
 				.unwrap_or_else(|| String::from("application/octet-stream")),
+			uploader_username: None,
 
 			download_count_type: download_count,
 			download_count: 0,

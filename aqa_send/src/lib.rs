@@ -1,18 +1,23 @@
+use argon2::password_hash::rand_core::OsRng;
+use argon2::password_hash::SaltString;
+use argon2::{Argon2, PasswordHasher};
 use std::future::{ready, Future};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use crate::db::Db;
-use crate::db_stuff::{AccountType, FileEntry};
+use crate::db::{Db, DbError};
+use crate::db_stuff::{Account, AccountType, FileEntry};
 use crate::files::DB_DIR;
 use crate::headers::{DownloadCount, Lifetime, DOWNLOAD_COUNT, LIFETIME, PASSWORD, VISIBILITY};
 
 use backtrace::Backtrace;
+use console::Term;
 use hyper::http::HeaderValue;
 use hyper::service::Service;
 use hyper::{Body, Method, Request, Response, StatusCode};
 use log::*;
 use thiserror::Error;
+use zeroize::Zeroizing;
 
 pub mod account;
 pub mod db;
@@ -146,10 +151,69 @@ pub fn split_uri_path(path: &str) -> impl Iterator<Item = &str> {
 }
 
 #[derive(Error, Debug)]
-pub enum CreateAccountError {}
+pub enum CreateAccountError {
+	#[error(transparent)]
+	FileOperation(#[from] std::io::Error),
 
-pub fn create_account(_name: String, _acc_type: AccountType) -> Result<(), CreateAccountError> {
-	unimplemented!()
+	#[error(transparent)]
+	DbError(#[from] DbError),
+
+	#[error("Account with that username already exists")]
+	AccountAlreadyExists,
+
+	#[error("Entered passwords don't match")]
+	PasswordsDoNotMatch,
+
+	#[error("Failed to hash the password: {0:?}")]
+	PasswordHashingError(argon2::password_hash::Error),
+}
+
+pub async fn create_account(name: String, acc_type: AccountType) -> Result<(), CreateAccountError> {
+	let cwd = std::env::current_dir()?;
+	let db_handle = db::init(&cwd)?;
+
+	{
+		let mut accounts_guard = db_handle.accounts_writer().await;
+
+		if accounts_guard.get(&name).is_some() {
+			return Err(CreateAccountError::AccountAlreadyExists);
+		}
+
+		let password = prompt_for_password()?;
+
+		accounts_guard.insert(
+			name,
+			Account {
+				password_hash: hash_password(password)?,
+				acc_type,
+			},
+		);
+	}
+
+	db_handle.save().await?;
+
+	Ok(())
+}
+
+fn prompt_for_password() -> Result<Zeroizing<String>, CreateAccountError> {
+	println!("Password: ");
+	let password = Zeroizing::new(Term::stdout().read_secure_line()?);
+	println!("Confirm password: ");
+	let confirmed_password = Zeroizing::new(Term::stdout().read_secure_line()?);
+	if *password != *confirmed_password {
+		return Err(CreateAccountError::PasswordsDoNotMatch);
+	}
+	Ok(password)
+}
+
+fn hash_password(password: Zeroizing<String>) -> Result<String, CreateAccountError> {
+	let salt = SaltString::generate(&mut OsRng);
+	let argon2 = Argon2::default();
+	let password_hash = argon2
+		.hash_password(password.as_bytes(), &salt)
+		.map_err(CreateAccountError::PasswordHashingError)?
+		.to_string();
+	Ok(password_hash)
 }
 
 #[cfg(test)]

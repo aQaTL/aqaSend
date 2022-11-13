@@ -61,6 +61,7 @@ pub enum CreateAccountError {
 
 	#[error("Entered passwords don't match")]
 	PasswordsDoNotMatch,
+
 	#[error("Failed to hash the password: {0:?}")]
 	PasswordHashingError(argon2::password_hash::Error),
 }

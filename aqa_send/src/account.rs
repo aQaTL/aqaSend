@@ -1,7 +1,10 @@
+use crate::cookie::parse_cookie;
+use crate::error::Field;
 use crate::{Account, AuthorizedUsers, Db};
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use hyper::body::HttpBody;
-use hyper::{Body, Request, Response, StatusCode};
+use hyper::http::HeaderValue;
+use hyper::{Body, HeaderMap, Request, Response, StatusCode};
 use log::debug;
 use std::iter::Iterator;
 use thiserror::Error;
@@ -98,18 +101,25 @@ pub async fn login(
 pub enum LogoutError {
 	#[error(transparent)]
 	Http(#[from] hyper::http::Error),
+
 	#[error(transparent)]
 	Hyper(#[from] hyper::Error),
+
 	#[error("Unsupported payload format")]
 	ExpectedJson,
+
 	#[error("Username is missing from request body")]
 	ExpectedUsername,
+
 	#[error("Password is missing from request body")]
 	ExpectedPassword,
+
 	#[error("Request body is too big")]
 	BodyTooBig,
+
 	#[error("Invalid username or password")]
 	LoginFail,
+
 	#[error("Hash problem")]
 	PasswordHash,
 }
@@ -120,4 +130,56 @@ pub async fn logout(
 	_authorized_users: AuthorizedUsers,
 ) -> Result<Response<Body>, LogoutError> {
 	todo!()
+}
+
+#[derive(Debug, Error)]
+pub enum AuthError {
+	#[error("{0:?} must only contain visible ascii characters")]
+	AsciiOnly(Field),
+
+	#[error("Malformed {0:?} data")]
+	Malformed(Field),
+
+	#[error(transparent)]
+	UuidParse(#[from] uuid::Error),
+
+	#[error("Session expired")]
+	SessionExpired,
+
+	#[error("Authorized user doesn't exist")]
+	UnknownUser,
+}
+
+pub async fn get_logged_in_user(
+	headers: &HeaderMap<HeaderValue>,
+	db: Db,
+	authorized_users: AuthorizedUsers,
+) -> Result<Option<Account>, AuthError> {
+	match headers.get("Cookie") {
+		Some(cookie) => {
+			let cookie_header = cookie
+				.to_str()
+				.map_err(|_| AuthError::AsciiOnly(Field::Cookie))?;
+			let (_, cookies) =
+				parse_cookie(cookie_header).map_err(|_| AuthError::Malformed(Field::Cookie))?;
+			debug!("Cookies: {cookies:?}");
+			match cookies.get("session") {
+				Some(session_cookie) => {
+					let session_cookie: Uuid = session_cookie.parse()?;
+
+					let user_uuid = authorized_users
+						.get_user_uuid(&session_cookie)
+						.ok_or(AuthError::SessionExpired)?;
+					debug!("Getting user with uuid {user_uuid}");
+					Ok(Some(
+						db.get_account(&user_uuid)
+							.await
+							.ok_or(AuthError::UnknownUser)?,
+					))
+				}
+				None => Ok(None),
+			}
+		}
+		None => Ok(None),
+	}
 }

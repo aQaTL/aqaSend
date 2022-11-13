@@ -509,6 +509,98 @@ Content-Type: text/plain\r\n\r\n\
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn private_file_downloadable_only_by_uploader() -> Result<()> {
+	let mut test_server = TestServer::new()?;
+
+	let username = String::from("Ala");
+	let password = String::from("zażółć gęsią jaźń");
+
+	let account_uuid = create_account(
+		test_server.db_handle.clone(),
+		username.clone(),
+		AccountType::Admin,
+		Zeroizing::new(password.clone()),
+	)
+	.await?;
+
+	debug!("Created account with uuid {account_uuid}");
+
+	let request = Request::builder()
+		.uri("/api/login")
+		.method(Method::POST)
+		.body(Body::from(format!("{username}\n{password}\n")))?;
+
+	let response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::CREATED);
+
+	let cookie = response
+		.headers()
+		.get(SET_COOKIE)
+		.expect("Set-Cookie missing")
+		.to_str()
+		.unwrap();
+	let (_, cookie) = cookie::parse_set_cookie(cookie).unwrap();
+
+	debug!("Logged in with session cookie: {cookie:?}");
+
+	let cookie_header_value = format!("{}={}", cookie.name, cookie.value);
+	debug!("Cookie header: {cookie_header_value}");
+
+	let file_contents = random_string(143);
+	let boundary = random_string(50);
+
+	const DOWNLOAD_COUNT: &str = "1";
+	const VISIBILITY: &str = "private";
+
+	let request = Request::builder()
+		.uri("/api/upload")
+		.method(Method::POST)
+		.header("Cookie", cookie_header_value.clone())
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.header(headers::DOWNLOAD_COUNT, DOWNLOAD_COUNT)
+		.header(headers::VISIBILITY, VISIBILITY)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"sample_file\"; filename=\"sample_file\"\r\n\
+Content-Type: text/plain\r\n\r\n\
+{}\r\n\
+--{boundary}--\r\n",
+			file_contents
+		)))?;
+
+	let mut response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::OK);
+
+	let response_bytes = to_bytes(response.body_mut()).await?;
+	let UploadResponse(uploaded_files) = serde_json::from_slice(&response_bytes)?;
+
+	assert_eq!(uploaded_files.len(), 1);
+	assert_eq!(uploaded_files[0].filename, "sample_file");
+
+	let uploaded_file_path = test_server
+		.db_dir
+		.path()
+		.join(DB_DIR)
+		.join(DOWNLOAD_COUNT)
+		.join(uploaded_files[0].uuid.to_string());
+
+	assert!(uploaded_file_path.exists());
+
+	let request = Request::builder()
+		.uri(format!("/api/download/{}", uploaded_files[0].uuid))
+		.method(Method::GET)
+		.body(Body::empty())?;
+
+	let response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+	Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn file_gets_removed_after_lifetime_runs_out() -> Result<()> {
 	let mut test_server = TestServer::new()?;
 	test_server.start_cleanup_task(Duration::from_millis(10));

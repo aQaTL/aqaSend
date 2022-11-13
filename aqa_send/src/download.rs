@@ -10,10 +10,11 @@ use thiserror::Error;
 use tokio::io::AsyncReadExt;
 use uuid::Uuid;
 
+use crate::account::{get_logged_in_user, AuthError};
 use crate::db::{self, Db};
 use crate::db_stuff::FileEntry;
-use crate::headers::{DownloadCount, Password};
-use crate::{StatusCode, PASSWORD};
+use crate::headers::{DownloadCount, Password, Visibility};
+use crate::{AuthorizedUsers, StatusCode, PASSWORD};
 
 #[derive(Debug, Error)]
 pub enum DownloadError {
@@ -29,6 +30,9 @@ pub enum DownloadError {
 	#[error(transparent)]
 	Db(#[from] db::DbError),
 
+	#[error(transparent)]
+	AuthError(#[from] AuthError),
+
 	#[error("File id not found or not present")]
 	NotFound,
 	#[error("Invalid password")]
@@ -39,6 +43,7 @@ pub async fn download(
 	uuid: String,
 	req: Request<Body>,
 	db: Db,
+	authorized_users: AuthorizedUsers,
 ) -> Result<Response<Body>, DownloadError> {
 	let uuid = Uuid::parse_str(&uuid)?;
 	debug!("Downloading {}", uuid);
@@ -48,6 +53,20 @@ pub async fn download(
 		.await
 		.ok_or(DownloadError::NotFound)?
 		.to_owned();
+
+	let current_user =
+		get_logged_in_user(&req.headers(), db.clone(), authorized_users.clone()).await?;
+	if matches!(file_entry.visibility, Visibility::Private) {
+		let authorized = match (current_user, file_entry.uploader_uuid) {
+			(Some(current_user), Some(uploader)) => current_user.uuid == uploader,
+			_ => false,
+		};
+		if !authorized {
+			return Ok(Response::builder()
+				.status(StatusCode::UNAUTHORIZED)
+				.body(Body::empty())?);
+		}
+	}
 
 	if let Some(Password(ref password)) = file_entry.password {
 		let provided_password = req

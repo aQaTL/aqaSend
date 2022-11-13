@@ -102,7 +102,12 @@ impl Service<Request<Body>> for AqaService {
 			)),
 			(Method::OPTIONS, ["api", "upload"]) => Box::pin(preflight_request(req)),
 			(Method::GET, ["api", "download", uuid]) => Box::pin(handle_response(
-				download::download(uuid.to_string(), req, self.db.clone()),
+				download::download(
+					uuid.to_string(),
+					req,
+					self.db.clone(),
+					self.authorized_users.clone(),
+				),
 				origin_header,
 			)),
 			(Method::GET, ["api", "list.json"]) => Box::pin(handle_response(

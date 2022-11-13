@@ -8,10 +8,9 @@ use thiserror::Error;
 use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 
-use crate::cookie::parse_cookie;
+use crate::account::{get_logged_in_user, AuthError};
 use crate::db::Db;
 use crate::db_stuff::FileEntry;
-use crate::error::Field;
 use crate::headers::{DownloadCount, HeaderError, Lifetime, Password, Visibility, DOWNLOAD_COUNT};
 use crate::{AuthorizedUsers, LIFETIME, PASSWORD, VISIBILITY};
 
@@ -41,23 +40,11 @@ pub enum UploadError {
 	#[error(transparent)]
 	DbSerialize(#[from] serde_json::Error),
 
-	#[error("{0:?} must only contain visible ascii characters")]
-	AsciiOnly(Field),
-
-	#[error("Malformed {0:?} data")]
-	Malformed(Field),
-
-	#[error(transparent)]
-	UuidParse(#[from] uuid::Error),
-
-	#[error("Session expired")]
-	SessionExpired,
-
-	#[error("Authorized user doesn't exist")]
-	UnknownUser,
-
 	#[error("Only logged in users can set visibility to private")]
 	PrivateUploadWithoutAccount,
+
+	#[error(transparent)]
+	AuthError(#[from] AuthError),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -93,33 +80,7 @@ pub async fn upload(
 	let boundary = format!("--{}", boundary);
 	debug!("Boundary: {}", boundary);
 
-	let uploader = match parts.headers.get("Cookie") {
-		Some(cookie) => {
-			let cookie_header = cookie
-				.to_str()
-				.map_err(|_| UploadError::AsciiOnly(Field::Cookie))?;
-			let (_, cookies) =
-				parse_cookie(cookie_header).map_err(|_| UploadError::Malformed(Field::Cookie))?;
-			debug!("Cookies: {cookies:?}");
-			match cookies.get("session") {
-				Some(session_cookie) => {
-					let session_cookie: Uuid = session_cookie.parse()?;
-
-					let user_uuid = authorized_users
-						.get_user_uuid(&session_cookie)
-						.ok_or(UploadError::SessionExpired)?;
-					debug!("Getting user with uuid {user_uuid}");
-					Some(
-						db.get_account(&user_uuid)
-							.await
-							.ok_or(UploadError::UnknownUser)?,
-					)
-				}
-				None => None,
-			}
-		}
-		None => None,
-	};
+	let uploader = get_logged_in_user(&parts.headers, db.clone(), authorized_users.clone()).await?;
 
 	let download_count: DownloadCount = parts.headers.get(DOWNLOAD_COUNT).try_into()?;
 	let password: Option<Password> = parts

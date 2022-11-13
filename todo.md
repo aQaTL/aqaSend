@@ -4,7 +4,7 @@
 - [x] Account types
 - [ ] Admin account
 - [x] Cli command to create account
-- [ ] Log in api
+- [x] Log in api
 - [ ] Log in page
 - [ ] Add a trait bound `Into<Response<Body>>` to handle_response, so that the error variant
 	can also generate a response

@@ -10,10 +10,11 @@ use log::*;
 use thiserror::Error;
 use tokio::runtime::Runtime;
 
+use aqa_send::cli_commands::create_account::create_account_cmd;
 use aqa_send::db::{self, DbError};
 use aqa_send::db_stuff::AccountType;
+use aqa_send::tasks;
 use aqa_send::tasks::cleanup::{DEFAULT_CLEANUP_INTERVAL, DEFAULT_START_LAG};
-use aqa_send::{create_account, tasks};
 use aqa_send::{AqaService, AqaServiceError};
 
 const USAGE: &str = r#"aqaSend
@@ -70,7 +71,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 		Some(Command::Help) => println!("{USAGE}"),
 		Some(Command::CreateAccount { name, acc_type }) => Runtime::new()
 			.expect("Failed to build tokio Runtime")
-			.block_on(create_account(name, acc_type))?,
+			.block_on(create_account_cmd(name, acc_type))?,
 		None => run()?,
 	}
 

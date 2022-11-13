@@ -13,7 +13,7 @@ tokio = { version = "1.15.0", features = ["rt-multi-thread", "net", "macros", "f
 futures = "0.3.19"
 log = "0.4.14"
 thiserror = "1.0.30"
-uuid = { version = "1.1.2", features = ["v4", "serde"] }
+uuid = { version = "1.1.2", features = ["v4", "serde", "fast-rng"] }
 bytes = "1.1.0"
 serde = { version = "1.0.136", features = ["derive"] }
 serde_json = "1.0.78"
@@ -27,6 +27,8 @@ pico-args = "0.5.0"
 console = "0.15.1"
 zeroize = "1.5.7"
 argon2 = "0.4.1"
+dashmap = "5.4.0"
+nom = "7.1.1"
 
 [target.'cfg(target_os = "linux")'.dependencies.systemd-socket-activation]
 features = ["dlopen"]

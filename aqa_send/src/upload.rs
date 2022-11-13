@@ -8,29 +8,56 @@ use thiserror::Error;
 use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 
+use crate::cookie::parse_cookie;
 use crate::db::Db;
 use crate::db_stuff::FileEntry;
+use crate::error::Field;
 use crate::headers::{DownloadCount, HeaderError, Lifetime, Password, Visibility, DOWNLOAD_COUNT};
-use crate::{LIFETIME, PASSWORD, VISIBILITY};
+use crate::{AuthorizedUsers, LIFETIME, PASSWORD, VISIBILITY};
 
 #[derive(Debug, Error)]
 pub enum UploadError {
 	#[error(transparent)]
 	Http(#[from] hyper::http::Error),
+
 	#[error(transparent)]
 	Multipart(#[from] MultipartError),
+
 	#[error("Failed to create new file")]
 	FileCreate(std::io::Error),
+
 	#[error("Io error occurred when writing uploaded file")]
 	FileWrite(std::io::Error),
+
 	#[error("Upload requires `multipart/form-data` Content-Type")]
 	InvalidContentType,
+
 	#[error("Multipart/form-data upload must define a boundary")]
 	BoundaryExpected,
+
 	#[error(transparent)]
 	AqaHeader(#[from] HeaderError),
+
 	#[error(transparent)]
 	DbSerialize(#[from] serde_json::Error),
+
+	#[error("{0:?} must only contain visible ascii characters")]
+	AsciiOnly(Field),
+
+	#[error("Malformed {0:?} data")]
+	Malformed(Field),
+
+	#[error(transparent)]
+	UuidParse(#[from] uuid::Error),
+
+	#[error("Session expired")]
+	SessionExpired,
+
+	#[error("Authorized user doesn't exist")]
+	UnknownUser,
+
+	#[error("Only logged in users can set visibility to private")]
+	PrivateUploadWithoutAccount,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -42,8 +69,11 @@ pub struct UploadedFile {
 	pub filename: String,
 }
 
-#[tracing::instrument]
-pub async fn upload(req: Request<Body>, db: Db) -> Result<Response<Body>, UploadError> {
+pub async fn upload(
+	req: Request<Body>,
+	db: Db,
+	authorized_users: AuthorizedUsers,
+) -> Result<Response<Body>, UploadError> {
 	use UploadError::{BoundaryExpected, FileCreate, FileWrite, InvalidContentType};
 
 	let (parts, body) = req.into_parts();
@@ -63,6 +93,34 @@ pub async fn upload(req: Request<Body>, db: Db) -> Result<Response<Body>, Upload
 	let boundary = format!("--{}", boundary);
 	debug!("Boundary: {}", boundary);
 
+	let uploader = match parts.headers.get("Cookie") {
+		Some(cookie) => {
+			let cookie_header = cookie
+				.to_str()
+				.map_err(|_| UploadError::AsciiOnly(Field::Cookie))?;
+			let (_, cookies) =
+				parse_cookie(cookie_header).map_err(|_| UploadError::Malformed(Field::Cookie))?;
+			debug!("Cookies: {cookies:?}");
+			match cookies.get("session") {
+				Some(session_cookie) => {
+					let session_cookie: Uuid = session_cookie.parse()?;
+
+					let user_uuid = authorized_users
+						.get_user_uuid(&session_cookie)
+						.ok_or(UploadError::SessionExpired)?;
+					debug!("Getting user with uuid {user_uuid}");
+					Some(
+						db.get_account(&user_uuid)
+							.await
+							.ok_or(UploadError::UnknownUser)?,
+					)
+				}
+				None => None,
+			}
+		}
+		None => None,
+	};
+
 	let download_count: DownloadCount = parts.headers.get(DOWNLOAD_COUNT).try_into()?;
 	let password: Option<Password> = parts
 		.headers
@@ -71,6 +129,10 @@ pub async fn upload(req: Request<Body>, db: Db) -> Result<Response<Body>, Upload
 		.transpose()?;
 	let visibility: Visibility = parts.headers.get(VISIBILITY).try_into()?;
 	let lifetime: Lifetime = parts.headers.get(LIFETIME).try_into()?;
+
+	if let (None, Visibility::Private) = (&uploader, visibility) {
+		return Err(UploadError::PrivateUploadWithoutAccount);
+	}
 
 	let mut multipart = Multipart {
 		body,
@@ -101,7 +163,8 @@ pub async fn upload(req: Request<Body>, db: Db) -> Result<Response<Body>, Upload
 			content_type: header
 				.content_type
 				.unwrap_or_else(|| String::from("application/octet-stream")),
-			uploader_username: None,
+
+			uploader_uuid: uploader.as_ref().map(|uploader| uploader.uuid),
 
 			download_count_type: download_count,
 			download_count: 0,

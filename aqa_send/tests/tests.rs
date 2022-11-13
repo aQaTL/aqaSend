@@ -1,18 +1,21 @@
-extern crate core;
-
 use anyhow::Result;
 use hyper::body::to_bytes;
+use hyper::header::SET_COOKIE;
 use hyper::service::Service;
 use hyper::{Body, Method, Request, Response, StatusCode};
+use log::debug;
 use rand::thread_rng;
 use std::time::Duration;
 use tempfile::TempDir;
 use tokio::fs;
+use zeroize::Zeroizing;
 
+use aqa_send::cli_commands::create_account::create_account;
+use aqa_send::db_stuff::AccountType;
 use aqa_send::files::DB_DIR;
 use aqa_send::headers::Lifetime;
 use aqa_send::upload::UploadResponse;
-use aqa_send::{db, headers, list, tasks, AqaService, AqaServiceError};
+use aqa_send::{cookie, db, headers, list, tasks, AqaService, AqaServiceError};
 
 struct TestServer {
 	#[allow(dead_code)]
@@ -397,8 +400,42 @@ Content-Type: text/plain\r\n\r\n\
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn private_file_not_present_on_listing() -> Result<()> {
+async fn private_file_visible_only_to_logged_in_users() -> Result<()> {
 	let mut test_server = TestServer::new()?;
+
+	let username = String::from("Ala");
+	let password = String::from("zażółć gęsią jaźń");
+
+	let account_uuid = create_account(
+		test_server.db_handle.clone(),
+		username.clone(),
+		AccountType::Admin,
+		Zeroizing::new(password.clone()),
+	)
+	.await?;
+
+	debug!("Created account with uuid {account_uuid}");
+
+	let request = Request::builder()
+		.uri("/api/login")
+		.method(Method::POST)
+		.body(Body::from(format!("{username}\n{password}\n")))?;
+
+	let response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::CREATED);
+
+	let cookie = response
+		.headers()
+		.get(SET_COOKIE)
+		.expect("Set-Cookie missing")
+		.to_str()
+		.unwrap();
+	let (_, cookie) = cookie::parse_set_cookie(cookie).unwrap();
+
+	debug!("Logged in with session cookie: {cookie:?}");
+
+	let cookie_header_value = format!("{}={}", cookie.name, cookie.value);
+	debug!("Cookie header: {cookie_header_value}");
 
 	let file_contents = random_string(143);
 	let boundary = random_string(50);
@@ -409,6 +446,7 @@ async fn private_file_not_present_on_listing() -> Result<()> {
 	let request = Request::builder()
 		.uri("/api/upload")
 		.method(Method::POST)
+		.header("Cookie", cookie_header_value.clone())
 		.header(
 			"Content-Type",
 			format!("multipart/form-data; boundary={boundary}"),
@@ -453,6 +491,19 @@ Content-Type: text/plain\r\n\r\n\
 	let response_bytes = to_bytes(response.body_mut()).await?;
 	let list: Vec<list::OwnedFileModel> = serde_json::from_slice(&response_bytes)?;
 	assert_eq!(list.len(), 0);
+
+	let request = Request::builder()
+		.uri("/api/list.json")
+		.method(Method::GET)
+		.header("Cookie", cookie_header_value)
+		.body(Body::empty())?;
+
+	let mut response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::OK);
+
+	let response_bytes = to_bytes(response.body_mut()).await?;
+	let list: Vec<list::OwnedFileModel> = serde_json::from_slice(&response_bytes)?;
+	assert_eq!(list.len(), 1);
 
 	Ok(())
 }
@@ -607,6 +658,50 @@ Content-Type: text/plain\r\n\r\n\
 
 	let response_bytes = to_bytes(response.body_mut()).await?;
 	assert_eq!(file_contents.as_bytes(), response_bytes.as_ref());
+
+	Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn login_works() -> Result<()> {
+	let mut test_server = TestServer::new()?;
+
+	let username = String::from("Ala");
+	let password = String::from("zażółć gęsią jaźń");
+
+	debug!("creating account");
+	let _account_uuid = create_account(
+		test_server.db_handle.clone(),
+		username.clone(),
+		AccountType::Admin,
+		Zeroizing::new(password.clone()),
+	)
+	.await?;
+
+	debug!("creating request");
+	let request = Request::builder()
+		.uri("/api/login")
+		.method(Method::POST)
+		.body(Body::from(format!("{username}\n{password}\n")))?;
+
+	debug!("processing request");
+	let response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::CREATED);
+
+	debug!("getting cookie");
+	let cookie = response
+		.headers()
+		.get(SET_COOKIE)
+		.expect("Set-Cookie missing")
+		.to_str()
+		.unwrap();
+
+	debug!("parsing cookie");
+	let (_, cookie) = cookie::parse_set_cookie(cookie).unwrap();
+
+	assert!(cookie.http_only);
+	assert!(cookie.secure);
+	assert_eq!(cookie.name, "session");
 
 	Ok(())
 }

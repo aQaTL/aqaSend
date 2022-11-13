@@ -1,28 +1,30 @@
-use argon2::password_hash::rand_core::OsRng;
-use argon2::password_hash::SaltString;
-use argon2::{Argon2, PasswordHasher};
 use std::future::{ready, Future};
+use std::ops::Deref;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{Context, Poll};
+
+use backtrace::Backtrace;
+use dashmap::DashMap;
+use hyper::http::HeaderValue;
+use hyper::service::Service;
+use hyper::{Body, Method, Request, Response, StatusCode};
+use log::*;
+use thiserror::Error;
+use uuid::Uuid;
 
 use crate::db::{Db, DbError};
 use crate::db_stuff::{Account, AccountType, FileEntry};
 use crate::files::DB_DIR;
 use crate::headers::{DownloadCount, Lifetime, DOWNLOAD_COUNT, LIFETIME, PASSWORD, VISIBILITY};
 
-use backtrace::Backtrace;
-use console::Term;
-use hyper::http::HeaderValue;
-use hyper::service::Service;
-use hyper::{Body, Method, Request, Response, StatusCode};
-use log::*;
-use thiserror::Error;
-use zeroize::Zeroizing;
-
 pub mod account;
+pub mod cli_commands;
+pub mod cookie;
 pub mod db;
 pub mod db_stuff;
 pub mod download;
+pub mod error;
 pub mod files;
 pub mod headers;
 pub mod list;
@@ -31,11 +33,35 @@ pub mod upload;
 
 pub struct AqaService {
 	db: Db,
+	authorized_users: AuthorizedUsers,
+}
+
+/// Concurrent hashmap containing logged in users
+/// key: Uuid of session cookie
+/// value: Uuid of an user
+#[derive(Default, Clone)]
+pub struct AuthorizedUsers(Arc<DashMap<Uuid, Uuid>>);
+
+impl AuthorizedUsers {
+	pub fn get_user_uuid(&self, session_uuid: &Uuid) -> Option<Uuid> {
+		self.get(session_uuid).map(|entry| *entry.value())
+	}
+}
+
+impl Deref for AuthorizedUsers {
+	type Target = Arc<DashMap<Uuid, Uuid>>;
+
+	fn deref(&self) -> &Self::Target {
+		&self.0
+	}
 }
 
 impl AqaService {
 	pub fn new(db: Db) -> Self {
-		AqaService { db }
+		AqaService {
+			db,
+			authorized_users: AuthorizedUsers::default(),
+		}
 	}
 }
 
@@ -71,7 +97,7 @@ impl Service<Request<Body>> for AqaService {
 		match (method, path.as_slice()) {
 			(Method::GET, ["api"]) => Box::pin(hello(req)),
 			(Method::POST, ["api", "upload"]) => Box::pin(handle_response(
-				upload::upload(req, self.db.clone()),
+				upload::upload(req, self.db.clone(), self.authorized_users.clone()),
 				origin_header,
 			)),
 			(Method::OPTIONS, ["api", "upload"]) => Box::pin(preflight_request(req)),
@@ -80,7 +106,15 @@ impl Service<Request<Body>> for AqaService {
 				origin_header,
 			)),
 			(Method::GET, ["api", "list.json"]) => Box::pin(handle_response(
-				list::list(req, self.db.clone()),
+				list::list(req, self.db.clone(), self.authorized_users.clone()),
+				origin_header,
+			)),
+			(Method::POST, ["api", "login"]) => Box::pin(handle_response(
+				account::login(req, self.db.clone(), self.authorized_users.clone()),
+				origin_header,
+			)),
+			(Method::POST, ["api", "logout"]) => Box::pin(handle_response(
+				account::logout(req, self.db.clone(), self.authorized_users.clone()),
 				origin_header,
 			)),
 			_ => Box::pin(ready(Ok(Response::builder()
@@ -148,72 +182,6 @@ async fn hello(_req: Request<Body>) -> Result<Response<Body>, AqaServiceError> {
 
 pub fn split_uri_path(path: &str) -> impl Iterator<Item = &str> {
 	path.split('/').filter(|segment| !segment.is_empty())
-}
-
-#[derive(Error, Debug)]
-pub enum CreateAccountError {
-	#[error(transparent)]
-	FileOperation(#[from] std::io::Error),
-
-	#[error(transparent)]
-	DbError(#[from] DbError),
-
-	#[error("Account with that username already exists")]
-	AccountAlreadyExists,
-
-	#[error("Entered passwords don't match")]
-	PasswordsDoNotMatch,
-
-	#[error("Failed to hash the password: {0:?}")]
-	PasswordHashingError(argon2::password_hash::Error),
-}
-
-pub async fn create_account(name: String, acc_type: AccountType) -> Result<(), CreateAccountError> {
-	let cwd = std::env::current_dir()?;
-	let db_handle = db::init(&cwd)?;
-
-	{
-		let mut accounts_guard = db_handle.accounts_writer().await;
-
-		if accounts_guard.get(&name).is_some() {
-			return Err(CreateAccountError::AccountAlreadyExists);
-		}
-
-		let password = prompt_for_password()?;
-
-		accounts_guard.insert(
-			name,
-			Account {
-				password_hash: hash_password(password)?,
-				acc_type,
-			},
-		);
-	}
-
-	db_handle.save().await?;
-
-	Ok(())
-}
-
-fn prompt_for_password() -> Result<Zeroizing<String>, CreateAccountError> {
-	println!("Password: ");
-	let password = Zeroizing::new(Term::stdout().read_secure_line()?);
-	println!("Confirm password: ");
-	let confirmed_password = Zeroizing::new(Term::stdout().read_secure_line()?);
-	if *password != *confirmed_password {
-		return Err(CreateAccountError::PasswordsDoNotMatch);
-	}
-	Ok(password)
-}
-
-fn hash_password(password: Zeroizing<String>) -> Result<String, CreateAccountError> {
-	let salt = SaltString::generate(&mut OsRng);
-	let argon2 = Argon2::default();
-	let password_hash = argon2
-		.hash_password(password.as_bytes(), &salt)
-		.map_err(CreateAccountError::PasswordHashingError)?
-		.to_string();
-	Ok(password_hash)
 }
 
 #[cfg(test)]

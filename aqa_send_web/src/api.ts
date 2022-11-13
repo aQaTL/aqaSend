@@ -1,6 +1,11 @@
 export const API_ENDPOINT =
 	process.env.NODE_ENV === "production" ? "notsureyet" : "http://127.0.0.1:8000";
 
+export interface Login {
+	username: string,
+	password: string,
+}
+
 export type DownloadCount =
 	"infinite"
 	| "1"

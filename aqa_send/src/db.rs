@@ -1,4 +1,5 @@
 use log::info;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io;
@@ -16,6 +17,7 @@ use crate::{files, FileEntry, DB_DIR};
 
 const DB_FILE: &str = "index";
 const ACCOUNTS_FILE: &str = "accounts";
+const ACCOUNT_UUIDS_PATH: &str = "account_uuids";
 
 pub fn init(working_dir: &Path) -> Result<Db, DbError> {
 	files::init_app_directory_structure(working_dir)?;
@@ -23,6 +25,7 @@ pub fn init(working_dir: &Path) -> Result<Db, DbError> {
 	let db_path = working_dir.join(DB_DIR);
 	let db_file_path = db_path.join(DB_FILE);
 	let accounts_path = db_path.join(ACCOUNTS_FILE);
+	let account_uuids_path = db_path.join(ACCOUNT_UUIDS_PATH);
 
 	let db_config = Box::leak(Box::new(DbConfig {
 		db_path,
@@ -36,15 +39,22 @@ pub fn init(working_dir: &Path) -> Result<Db, DbError> {
 		Err(err) => return Err(DbError::DbFileOperation(err)),
 	};
 
-	let accounts: HashMap<String, Account> = match File::open(&accounts_path) {
+	let accounts: HashMap<Uuid, Account> = match File::open(&accounts_path) {
+		Ok(mut accounts_file) => serde_json::from_reader(&mut accounts_file)?,
+		Err(err) if err.kind() == ErrorKind::NotFound => Default::default(),
+		Err(err) => return Err(DbError::DbFileOperation(err)),
+	};
+
+	let account_uuids: HashMap<String, Uuid> = match File::open(&account_uuids_path) {
 		Ok(mut accounts_file) => serde_json::from_reader(&mut accounts_file)?,
 		Err(err) if err.kind() == ErrorKind::NotFound => Default::default(),
 		Err(err) => return Err(DbError::DbFileOperation(err)),
 	};
 
 	Ok(Db {
-		data: Arc::new(RwLock::new(db)),
+		file_entries: Arc::new(RwLock::new(db)),
 		accounts: Arc::new(RwLock::new(accounts)),
+		account_uuids: Arc::new(RwLock::new(account_uuids)),
 		config: db_config,
 	})
 }
@@ -65,23 +75,29 @@ pub enum DbError {
 
 	#[error("Blocking task failed")]
 	BlockingTaskJoinError(#[from] JoinError),
+
+	#[error("Tried to add account with username that already exists")]
+	AccountAlreadyExists,
 }
 
 pub type DbDataHM = HashMap<Uuid, FileEntry>;
-pub type AccountsHM = HashMap<String, Account>;
+pub type AccountsHM = HashMap<Uuid, Account>;
+pub type AccountUuidsHM = HashMap<String, Uuid>;
 
 #[derive(Debug)]
 pub struct Db {
-	data: Arc<RwLock<DbDataHM>>,
+	file_entries: Arc<RwLock<DbDataHM>>,
 	accounts: Arc<RwLock<AccountsHM>>,
+	account_uuids: Arc<RwLock<AccountUuidsHM>>,
 	pub config: &'static DbConfig,
 }
 
 impl Clone for Db {
 	fn clone(&self) -> Self {
 		Db {
-			data: Arc::clone(&self.data),
+			file_entries: Arc::clone(&self.file_entries),
 			accounts: Arc::clone(&self.accounts),
+			account_uuids: Arc::clone(&self.account_uuids),
 			config: self.config,
 		}
 	}
@@ -89,19 +105,27 @@ impl Clone for Db {
 
 impl Db {
 	pub async fn get(&self, uuid: &Uuid) -> Option<FileEntry> {
-		self.data.read().await.get(uuid).map(ToOwned::to_owned)
+		self.file_entries
+			.read()
+			.await
+			.get(uuid)
+			.map(ToOwned::to_owned)
 	}
 
 	pub async fn reader(&self) -> OwnedRwLockReadGuard<DbDataHM> {
-		self.data.clone().read_owned().await
+		self.file_entries.clone().read_owned().await
 	}
 
 	pub async fn writer(&self) -> OwnedRwLockWriteGuard<DbDataHM> {
-		self.data.clone().write_owned().await
+		self.file_entries.clone().write_owned().await
 	}
 
 	pub async fn put(&self, uuid: Uuid, file_entry: FileEntry) {
-		self.data.write().await.insert(uuid, file_entry);
+		self.file_entries.write().await.insert(uuid, file_entry);
+	}
+
+	pub async fn get_account(&self, uuid: &Uuid) -> Option<Account> {
+		self.accounts.read().await.get(uuid).map(ToOwned::to_owned)
 	}
 
 	pub async fn accounts_reader(&self) -> OwnedRwLockReadGuard<AccountsHM> {
@@ -112,8 +136,16 @@ impl Db {
 		self.accounts.clone().write_owned().await
 	}
 
+	pub async fn account_uuids_reader(&self) -> OwnedRwLockReadGuard<AccountUuidsHM> {
+		self.account_uuids.clone().read_owned().await
+	}
+
+	pub async fn account_uuids_writer(&self) -> OwnedRwLockWriteGuard<AccountUuidsHM> {
+		self.account_uuids.clone().write_owned().await
+	}
+
 	pub async fn update(&self, uuid: &Uuid, new_file_entry: FileEntry) -> Result<(), DbError> {
-		let mut write_guard = self.data.write().await;
+		let mut write_guard = self.file_entries.write().await;
 		let file_entry = write_guard.get_mut(uuid).ok_or(DbError::UpdateFail)?;
 		*file_entry = new_file_entry;
 		Ok(())
@@ -123,7 +155,7 @@ impl Db {
 		info!("Serializing db to disk");
 
 		let data_hm: DbDataHM = {
-			let data_guard = self.data.read().await;
+			let data_guard = self.file_entries.read().await;
 			data_guard.clone()
 		};
 
@@ -148,6 +180,19 @@ impl Db {
 		info!("Db serialized and saved to disk");
 
 		Ok(())
+	}
+
+	pub async fn add_account(&self, uuid: Uuid, account: Account) -> Result<(), DbError> {
+		match self.accounts_writer().await.entry(uuid) {
+			Entry::Occupied(_) => Err(DbError::AccountAlreadyExists),
+			Entry::Vacant(entry) => {
+				self.account_uuids_writer()
+					.await
+					.insert(account.username.clone(), uuid);
+				entry.insert(account);
+				Ok(())
+			}
+		}
 	}
 }
 

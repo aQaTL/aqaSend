@@ -1,19 +1,38 @@
-use crate::{FileEntry, Lifetime};
+use crate::cookie::parse_cookie;
+use crate::{AuthorizedUsers, FileEntry, Lifetime};
 use hyper::{Body, Request, Response, StatusCode};
+use log::debug;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::error;
 use uuid::Uuid;
 
 use crate::db::Db;
+use crate::error::Field;
 use crate::headers::Visibility;
 
 #[derive(Debug, Error)]
 pub enum ListError {
 	#[error(transparent)]
 	Http(#[from] hyper::http::Error),
+
 	#[error(transparent)]
 	Json(#[from] serde_json::Error),
+
+	#[error(transparent)]
+	UuidParse(#[from] uuid::Error),
+
+	#[error("{0:?} must only contain visible ascii characters")]
+	AsciiOnly(Field),
+
+	#[error("Malformed {0:?} data")]
+	Malformed(Field),
+
+	#[error("Session expired")]
+	SessionExpired,
+
+	#[error("Authorized user doesn't exist")]
+	UnknownUser,
 }
 
 #[derive(Serialize)]
@@ -30,21 +49,52 @@ pub struct OwnedFileModel {
 	pub file_entry: FileEntry,
 }
 
-pub async fn list(_req: Request<Body>, db: Db) -> Result<Response<Body>, ListError> {
+pub async fn list(
+	req: Request<Body>,
+	db: Db,
+	authorized_users: AuthorizedUsers,
+) -> Result<Response<Body>, ListError> {
+	let uploader = match req.headers().get("Cookie") {
+		Some(cookie) => {
+			let cookie_header = cookie
+				.to_str()
+				.map_err(|_| ListError::AsciiOnly(Field::Cookie))?;
+			let (_, cookies) =
+				parse_cookie(cookie_header).map_err(|_| ListError::Malformed(Field::Cookie))?;
+			debug!("Cookies: {cookies:?}");
+			match cookies.get("session") {
+				Some(session_cookie) => {
+					let session_cookie: Uuid = session_cookie.parse()?;
+
+					let user_uuid = authorized_users
+						.get_user_uuid(&session_cookie)
+						.ok_or(ListError::SessionExpired)?;
+					debug!("Getting user with uuid {user_uuid}");
+					Some(
+						db.get_account(&user_uuid)
+							.await
+							.ok_or(ListError::UnknownUser)?,
+					)
+				}
+				None => None,
+			}
+		}
+		None => None,
+	};
+
 	let db_reader = db.reader().await;
 	let list: Vec<FileModel> = db_reader
 		.iter()
-		// .map(|(key, value)| {
-		// 	(
-		// 		Uuid::from_slice(&key).unwrap(),
-		// 		bincode::deserialize(&value),
-		// 	)
-		// })
-		// .map(|(id, file_entry)| match file_entry {
-		// 	Ok(file_entry) => Some(FileModel { id: id.clone(), file_entry: file_entry.to_owned() }),
-		// 	Err(_) => None,
-		// })
-		.filter(|(_key, entry)| matches!(entry.visibility, Visibility::Public))
+		.filter(|(_uuid, entry)| {
+			if matches!(entry.visibility, Visibility::Public) {
+				true
+			} else {
+				match (entry.uploader_uuid, &uploader) {
+					(Some(uploader_uuid), Some(uploader)) => uploader_uuid == uploader.uuid,
+					_ => false,
+				}
+			}
+		})
 		.filter(|(_key, entry): &(_, &FileEntry)| match entry.lifetime {
 			Lifetime::Duration(lifetime) => match entry.upload_date.elapsed() {
 				Ok(elapsed) => elapsed <= lifetime,

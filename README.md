@@ -6,10 +6,10 @@ My clone of Firefox Send.
 
 - [ ] Easily upload files (web ui with drag & drop)
 - [ ] Ability to register an account and display your uploads
-- [ ] Option to automatically delete file after
+- [x] Option to automatically delete file after
 		- [x] Specified duration (1 hour, 1 day)
 		- Specified amount of downloads (1, 10, 100)
-- [ ] Protect file download with a password
+- [x] Protect file download with a password
 - [ ] Websocket API to update website live
 
 ## Clients / UIs

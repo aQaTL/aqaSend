@@ -55,7 +55,7 @@ pub async fn download(
 		.to_owned();
 
 	let current_user =
-		get_logged_in_user(&req.headers(), db.clone(), authorized_users.clone()).await?;
+		get_logged_in_user(req.headers(), db.clone(), authorized_users.clone()).await?;
 	if matches!(file_entry.visibility, Visibility::Private) {
 		let authorized = match (current_user, file_entry.uploader_uuid) {
 			(Some(current_user), Some(uploader)) => current_user.uuid == uploader,

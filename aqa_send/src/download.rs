@@ -92,7 +92,7 @@ pub async fn download(
 	db.update(&uuid, file_entry.clone()).await?;
 
 	// Make it immutable to prevent unsaved changes
-	// let file_entry = file_entry;
+	let file_entry = file_entry;
 
 	let mut file_path = db.config.db_path.clone();
 	file_path.push(file_entry.download_count_type.to_string());

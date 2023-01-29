@@ -46,6 +46,12 @@ pub struct InvalidCommandError(String);
 fn parse_args() -> Result<Args, Box<dyn Error>> {
 	let mut args = pico_args::Arguments::from_env();
 
+	if args.contains("--help") {
+		return Ok(Args {
+			command: Some(Command::Help),
+		});
+	}
+
 	let command = match args.subcommand()?.as_deref() {
 		Some("help") => Some(Command::Help),
 		Some("create-account") => {

@@ -1,14 +1,19 @@
 use crate::cookie::parse_cookie;
+use crate::db_stuff::AccountType;
 use crate::error::Field;
-use crate::{Account, AuthorizedUsers, Db};
+use crate::{cli_commands, Account, AuthorizedUsers, Db};
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
+use bytes::BytesMut;
+use futures::StreamExt;
 use hyper::body::HttpBody;
 use hyper::http::HeaderValue;
 use hyper::{Body, HeaderMap, Request, Response, StatusCode};
 use log::debug;
+use serde::{Deserialize, Serialize};
 use std::iter::Iterator;
 use thiserror::Error;
 use uuid::Uuid;
+use zeroize::Zeroizing;
 
 #[derive(Debug, Error)]
 pub enum LoginError {
@@ -182,4 +187,150 @@ pub async fn get_logged_in_user(
 		}
 		None => Ok(None),
 	}
+}
+
+#[derive(Debug, Error)]
+pub enum CreateRegistrationCodeError {
+	#[error(transparent)]
+	Http(#[from] hyper::http::Error),
+
+	#[error(transparent)]
+	AuthError(#[from] AuthError),
+
+	#[error("You must be logged in to do that")]
+	Unauthorized,
+
+	#[error("Insufficient permissions")]
+	InsufficientPermissions,
+}
+
+pub async fn create_registration_code(
+	req: Request<Body>,
+	db: Db,
+	authorized_users: AuthorizedUsers,
+) -> Result<Response<Body>, CreateRegistrationCodeError> {
+	let current_user = get_logged_in_user(req.headers(), db.clone(), authorized_users.clone())
+		.await?
+		.ok_or(CreateRegistrationCodeError::Unauthorized)?;
+
+	if !matches!(current_user.acc_type, AccountType::Admin) {
+		return Err(CreateRegistrationCodeError::InsufficientPermissions);
+	}
+
+	let registration_code = Uuid::new_v4().to_string();
+	db.registration_codes_writer()
+		.await
+		.push(registration_code.clone());
+
+	Ok(Response::builder()
+		.status(StatusCode::CREATED)
+		.header("Content-Type", "text/plain")
+		.body(Body::from(registration_code))?)
+}
+
+#[derive(Debug, Error)]
+pub enum CreateAccountFromRegistrationCodeError {
+	#[error(transparent)]
+	Http(#[from] hyper::http::Error),
+
+	#[error(transparent)]
+	Hyper(#[from] hyper::Error),
+
+	#[error("Invalid registration code")]
+	InvalidRegistrationCode,
+
+	#[error("Request to big")]
+	RequestTooBig,
+
+	#[error(transparent)]
+	CreateAccount(#[from] cli_commands::create_account::CreateAccountError),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateAccountModel {
+	pub registration_code: String,
+	pub username: String,
+	pub password: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateAccountResponse {
+	uuid: Uuid,
+}
+
+pub async fn create_account_from_registration_code(
+	req: Request<Body>,
+	db: Db,
+	authorized_users: AuthorizedUsers,
+) -> Result<Response<Body>, CreateAccountFromRegistrationCodeError> {
+	let (_parts, mut body) = req.into_parts();
+
+	debug!("Reading body");
+	let mut req_body = BytesMut::with_capacity(MAX_REQUEST_BODY_SIZE);
+	while let Some(chunk) = body.next().await {
+		let chunk = chunk?;
+		if req_body.len() + chunk.len() > MAX_REQUEST_BODY_SIZE {
+			return Err(CreateAccountFromRegistrationCodeError::RequestTooBig);
+		}
+		req_body.extend_from_slice(&chunk);
+	}
+
+	debug!("Validating registration code");
+	let create_account: CreateAccountModel = serde_json::from_slice(&req_body).unwrap();
+	if !registration_code_valid(&db, &create_account.registration_code).await {
+		return Err(CreateAccountFromRegistrationCodeError::InvalidRegistrationCode);
+	}
+
+	debug!("Creating account");
+	let uuid = crate::cli_commands::create_account::create_account(
+		db.clone(),
+		create_account.username,
+		AccountType::User,
+		Zeroizing::new(create_account.password),
+	)
+	.await?;
+
+	let new_account = CreateAccountResponse { uuid };
+	let response_body = serde_json::to_string_pretty(&new_account).unwrap();
+
+	debug!("Generating session token");
+	let session_token = Uuid::new_v4();
+	authorized_users.insert(session_token, new_account.uuid);
+
+	Ok(Response::builder()
+		.status(StatusCode::CREATED)
+		.header(
+			"Set-Cookie",
+			format!("session={}; Secure; HttpOnly", session_token),
+		)
+		.header("Content-Type", "application/json")
+		.body(Body::from(response_body))?)
+}
+
+#[derive(Debug, Error)]
+pub enum CheckRegistrationCodeError {
+	#[error(transparent)]
+	Http(#[from] hyper::http::Error),
+
+	#[error("Invalid registration code")]
+	InvalidRegistrationCode,
+}
+
+pub async fn check_registration_code(
+	_req: Request<Body>,
+	registration_code: String,
+	db: Db,
+) -> Result<Response<Body>, CheckRegistrationCodeError> {
+	if !registration_code_valid(&db, &registration_code).await {
+		return Err(CheckRegistrationCodeError::InvalidRegistrationCode);
+	}
+
+	Ok(Response::builder()
+		.status(StatusCode::OK)
+		.body(Body::empty())?)
+}
+
+pub async fn registration_code_valid(db: &Db, registration_code: &str) -> bool {
+	let registration_codes = db.registration_codes_reader().await;
+	registration_codes.iter().any(|v| *v == registration_code)
 }

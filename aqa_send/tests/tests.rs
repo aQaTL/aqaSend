@@ -1,4 +1,5 @@
 use anyhow::Result;
+use aqa_send::account::{CreateAccountModel, CreateAccountResponse};
 use hyper::body::to_bytes;
 use hyper::header::SET_COOKIE;
 use hyper::service::Service;
@@ -8,6 +9,7 @@ use rand::thread_rng;
 use std::time::Duration;
 use tempfile::TempDir;
 use tokio::fs;
+use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use aqa_send::cli_commands::create_account::create_account;
@@ -794,6 +796,105 @@ async fn login_works() -> Result<()> {
 	assert!(cookie.http_only);
 	assert!(cookie.secure);
 	assert_eq!(cookie.name, "session");
+
+	Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn registration_code_works() -> Result<()> {
+	let mut test_server = TestServer::new()?;
+
+	let username = String::from("Ala");
+	let password = String::from("zażółć gęsią jaźń");
+
+	debug!("creating account");
+	let _account_uuid = create_account(
+		test_server.db_handle.clone(),
+		username.clone(),
+		AccountType::Admin,
+		Zeroizing::new(password.clone()),
+	)
+	.await?;
+
+	debug!("logging in");
+	let request = Request::builder()
+		.uri("/api/login")
+		.method(Method::POST)
+		.body(Body::from(format!("{username}\n{password}\n")))?;
+
+	let response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::CREATED);
+
+	let session_cookie = response
+		.headers()
+		.get(SET_COOKIE)
+		.expect("Set-Cookie missing")
+		.to_str()
+		.unwrap();
+	let (_, session_cookie) = cookie::parse_set_cookie(session_cookie).unwrap();
+
+	debug!("creating registration code");
+	let request = Request::builder()
+		.uri("/api/registration_code")
+		.header(
+			"Cookie",
+			format!("{}={}", session_cookie.name, session_cookie.value),
+		)
+		.method(Method::GET)
+		.body(Body::empty())?;
+
+	let response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::CREATED);
+
+	let response_body = hyper::body::to_bytes(response.into_body()).await?;
+	let registration_code: Uuid = std::str::from_utf8(&response_body)?.parse()?;
+
+	debug!("Creating account from the registration code");
+	let payload = serde_json::to_vec(&CreateAccountModel {
+		registration_code: registration_code.to_string(),
+		username: "Ola".to_string(),
+		password: password.clone(),
+	})?;
+
+	let request = Request::builder()
+		.uri("/api/create_account")
+		.method(Method::POST)
+		.body(Body::from(payload))?;
+
+	let response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::CREATED);
+	let (parts, body) = response.into_parts();
+
+	let response_body = hyper::body::to_bytes(body).await?;
+	let _new_account: CreateAccountResponse = serde_json::from_slice(&response_body)?;
+	let new_account_session_cookie = parts
+		.headers
+		.get(SET_COOKIE)
+		.expect("Set-Cookie missing")
+		.to_str()
+		.unwrap();
+	let (_, new_account_session_cookie) =
+		cookie::parse_set_cookie(new_account_session_cookie).unwrap();
+
+	debug!("triyng out new user via whoami request");
+	let request = Request::builder()
+		.uri("/api/whoami")
+		.header(
+			"Cookie",
+			format!(
+				"{}={}",
+				new_account_session_cookie.name, new_account_session_cookie.value
+			),
+		)
+		.method(Method::GET)
+		.body(Body::empty())?;
+
+	let response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::OK);
+	let response_body = hyper::body::to_bytes(response.into_body()).await?;
+	let whoami = std::str::from_utf8(&response_body)?;
+
+	assert_eq!(whoami, "Ola");
 
 	Ok(())
 }

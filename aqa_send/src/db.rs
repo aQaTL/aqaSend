@@ -17,7 +17,7 @@ use crate::{files, FileEntry, DB_DIR};
 
 const DB_FILE: &str = "index";
 const ACCOUNTS_FILE: &str = "accounts";
-const ACCOUNT_UUIDS_PATH: &str = "account_uuids";
+const REGISTRATION_CODES_PATH: &str = "registration_codes";
 
 pub fn init(working_dir: &Path) -> Result<Db, DbError> {
 	files::init_app_directory_structure(working_dir)?;
@@ -25,28 +25,34 @@ pub fn init(working_dir: &Path) -> Result<Db, DbError> {
 	let db_path = working_dir.join(DB_DIR);
 	let db_file_path = db_path.join(DB_FILE);
 	let accounts_path = db_path.join(ACCOUNTS_FILE);
-	let account_uuids_path = db_path.join(ACCOUNT_UUIDS_PATH);
+	let registration_codes_path = db_path.join(REGISTRATION_CODES_PATH);
 
 	let db_config = Box::leak(Box::new(DbConfig {
 		db_path,
 		db_file_path: db_file_path.clone(),
 		accounts_path: accounts_path.clone(),
+		registration_codes_path: registration_codes_path.clone(),
 	}));
 
 	let db: HashMap<Uuid, FileEntry> = match File::open(&db_file_path) {
-		Ok(mut db_file) => serde_json::from_reader(&mut db_file)?,
+		Ok(mut file) => serde_json::from_reader(&mut file)?,
 		Err(err) if err.kind() == ErrorKind::NotFound => Default::default(),
 		Err(err) => return Err(DbError::DbFileOperation(err)),
 	};
 
 	let accounts: HashMap<Uuid, Account> = match File::open(&accounts_path) {
-		Ok(mut accounts_file) => serde_json::from_reader(&mut accounts_file)?,
+		Ok(mut file) => serde_json::from_reader(&mut file)?,
 		Err(err) if err.kind() == ErrorKind::NotFound => Default::default(),
 		Err(err) => return Err(DbError::DbFileOperation(err)),
 	};
 
-	let account_uuids: HashMap<String, Uuid> = match File::open(&account_uuids_path) {
-		Ok(mut accounts_file) => serde_json::from_reader(&mut accounts_file)?,
+	let mut account_uuids = HashMap::<String, Uuid>::with_capacity(accounts.len());
+	for account in accounts.values() {
+		account_uuids.insert(account.username.clone(), account.uuid);
+	}
+
+	let registration_codes: Vec<String> = match File::open(&registration_codes_path) {
+		Ok(mut file) => serde_json::from_reader(&mut file)?,
 		Err(err) if err.kind() == ErrorKind::NotFound => Default::default(),
 		Err(err) => return Err(DbError::DbFileOperation(err)),
 	};
@@ -55,6 +61,7 @@ pub fn init(working_dir: &Path) -> Result<Db, DbError> {
 		file_entries: Arc::new(RwLock::new(db)),
 		accounts: Arc::new(RwLock::new(accounts)),
 		account_uuids: Arc::new(RwLock::new(account_uuids)),
+		registration_codes: Arc::new(RwLock::new(registration_codes)),
 		config: db_config,
 	})
 }
@@ -83,12 +90,16 @@ pub enum DbError {
 pub type DbDataHM = HashMap<Uuid, FileEntry>;
 pub type AccountsHM = HashMap<Uuid, Account>;
 pub type AccountUuidsHM = HashMap<String, Uuid>;
+pub type RegistrationCodesVec = Vec<String>;
 
 #[derive(Debug)]
 pub struct Db {
 	file_entries: Arc<RwLock<DbDataHM>>,
 	accounts: Arc<RwLock<AccountsHM>>,
+	registration_codes: Arc<RwLock<Vec<String>>>,
+
 	account_uuids: Arc<RwLock<AccountUuidsHM>>,
+
 	pub config: &'static DbConfig,
 }
 
@@ -98,6 +109,7 @@ impl Clone for Db {
 			file_entries: Arc::clone(&self.file_entries),
 			accounts: Arc::clone(&self.accounts),
 			account_uuids: Arc::clone(&self.account_uuids),
+			registration_codes: Arc::clone(&self.registration_codes),
 			config: self.config,
 		}
 	}
@@ -144,6 +156,14 @@ impl Db {
 		self.account_uuids.clone().write_owned().await
 	}
 
+	pub async fn registration_codes_reader(&self) -> OwnedRwLockReadGuard<RegistrationCodesVec> {
+		self.registration_codes.clone().read_owned().await
+	}
+
+	pub async fn registration_codes_writer(&self) -> OwnedRwLockWriteGuard<RegistrationCodesVec> {
+		self.registration_codes.clone().write_owned().await
+	}
+
 	pub async fn update(&self, uuid: &Uuid, new_file_entry: FileEntry) -> Result<(), DbError> {
 		let mut write_guard = self.file_entries.write().await;
 		let file_entry = write_guard.get_mut(uuid).ok_or(DbError::UpdateFail)?;
@@ -164,6 +184,11 @@ impl Db {
 			accounts_guard.clone()
 		};
 
+		let registration_codes_vec: RegistrationCodesVec = {
+			let registration_codes_guard = self.registration_codes.read().await;
+			registration_codes_guard.clone()
+		};
+
 		let config: &'static DbConfig = self.config;
 
 		tokio::task::spawn_blocking(move || {
@@ -172,6 +197,9 @@ impl Db {
 
 			let mut file = File::create(&config.accounts_path)?;
 			serde_json::to_writer(&mut file, &accounts_hm)?;
+
+			let mut file = File::create(&config.registration_codes_path)?;
+			serde_json::to_writer(&mut file, &registration_codes_vec)?;
 
 			Result::<(), DbError>::Ok(())
 		})
@@ -201,4 +229,5 @@ pub struct DbConfig {
 	pub db_path: PathBuf,
 	pub db_file_path: PathBuf,
 	pub accounts_path: PathBuf,
+	pub registration_codes_path: PathBuf,
 }

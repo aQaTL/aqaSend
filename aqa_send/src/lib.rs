@@ -4,6 +4,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
+use account::{get_logged_in_user, AuthError};
 use backtrace::Backtrace;
 use dashmap::DashMap;
 use hyper::http::HeaderValue;
@@ -96,6 +97,10 @@ impl Service<Request<Body>> for AqaService {
 			.map(|hv: &HeaderValue| hv.to_owned());
 		match (method, path.as_slice()) {
 			(Method::GET, ["api"]) => Box::pin(hello(req)),
+			(Method::GET, ["api", "whoami"]) => Box::pin(handle_response(
+				whoami(req, self.db.clone(), self.authorized_users.clone()),
+				origin_header,
+			)),
 			(Method::POST, ["api", "upload"]) => Box::pin(handle_response(
 				upload::upload(req, self.db.clone(), self.authorized_users.clone()),
 				origin_header,
@@ -122,6 +127,32 @@ impl Service<Request<Body>> for AqaService {
 				account::logout(req, self.db.clone(), self.authorized_users.clone()),
 				origin_header,
 			)),
+			(Method::GET, ["api", "registration_code"]) => Box::pin(handle_response(
+				account::create_registration_code(
+					req,
+					self.db.clone(),
+					self.authorized_users.clone(),
+				),
+				origin_header,
+			)),
+			(Method::POST, ["api", "create_account"]) => Box::pin(handle_response(
+				account::create_account_from_registration_code(
+					req,
+					self.db.clone(),
+					self.authorized_users.clone(),
+				),
+				origin_header,
+			)),
+			(Method::GET, ["api", "check_registration_code", registration_code]) => {
+				Box::pin(handle_response(
+					account::check_registration_code(
+						req,
+						registration_code.to_string(),
+						self.db.clone(),
+					),
+					origin_header,
+				))
+			}
 			_ => Box::pin(ready(Ok(Response::builder()
 				.status(StatusCode::NOT_FOUND)
 				.body("Not found\n".into())
@@ -183,6 +214,34 @@ async fn hello(_req: Request<Body>) -> Result<Response<Body>, AqaServiceError> {
 	Ok(Response::builder()
 		.status(StatusCode::OK)
 		.body("Hello from aqaSend\n".into())?)
+}
+
+#[derive(Debug, Error)]
+enum WhoamiError {
+	#[error(transparent)]
+	Http(#[from] hyper::http::Error),
+
+	#[error(transparent)]
+	Auth(#[from] AuthError),
+
+	#[error("Not logged in")]
+	NotLoggedIn,
+}
+
+async fn whoami(
+	req: Request<Body>,
+	db: Db,
+	authorized_users: AuthorizedUsers,
+) -> Result<Response<Body>, WhoamiError> {
+	let (parts, _body) = req.into_parts();
+
+	let uploader = get_logged_in_user(&parts.headers, db, authorized_users)
+		.await?
+		.ok_or(WhoamiError::NotLoggedIn)?;
+
+	Ok(Response::builder()
+		.status(StatusCode::OK)
+		.body(Body::from(uploader.username))?)
 }
 
 pub fn split_uri_path(path: &str) -> impl Iterator<Item = &str> {

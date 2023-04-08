@@ -1,5 +1,5 @@
 use crate::cookie::parse_cookie;
-use crate::{AuthorizedUsers, FileEntry, Lifetime};
+use crate::{AuthorizedUsers, FileEntry, HttpHandlerError, Lifetime};
 use hyper::{Body, Request, Response, StatusCode};
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -34,6 +34,8 @@ pub enum ListError {
 	#[error("Authorized user doesn't exist")]
 	UnknownUser,
 }
+
+impl HttpHandlerError for ListError {}
 
 #[derive(Serialize)]
 struct FileModel<'a> {

@@ -12,7 +12,7 @@ use crate::account::{get_logged_in_user, AuthError};
 use crate::db::Db;
 use crate::db_stuff::FileEntry;
 use crate::headers::{DownloadCount, HeaderError, Lifetime, Password, Visibility, DOWNLOAD_COUNT};
-use crate::{AuthorizedUsers, LIFETIME, PASSWORD, VISIBILITY};
+use crate::{AuthorizedUsers, HttpHandlerError, LIFETIME, PASSWORD, VISIBILITY};
 
 #[derive(Debug, Error)]
 pub enum UploadError {
@@ -46,6 +46,8 @@ pub enum UploadError {
 	#[error(transparent)]
 	AuthError(#[from] AuthError),
 }
+
+impl HttpHandlerError for UploadError {}
 
 #[derive(Serialize, Deserialize)]
 pub struct UploadResponse(pub Vec<UploadedFile>);

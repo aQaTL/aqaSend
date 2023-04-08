@@ -14,6 +14,15 @@
 - [ ] Log out api
 - [x] API to generate a registration link
 - [x] Creating account from registration code
+
+## Error handling
+
+- [~] Better error type for handling faillible http requests
+    - [x] Separation between internal and external errors
+    - [x] User presentable toggle
+    - [x] Various error formats (plaintext, json, http)
+    - [ ] Ease of composability (not needing to add Http and Hyper errors everytime)
+
 - [ ] For handling errors, create a derive macro 
 	- Annotation to specify error code
     - Annotation to specify whether the error is user facing or not

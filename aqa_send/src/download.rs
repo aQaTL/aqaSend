@@ -14,7 +14,7 @@ use crate::account::{get_logged_in_user, AuthError};
 use crate::db::{self, Db};
 use crate::db_stuff::FileEntry;
 use crate::headers::{DownloadCount, Password, Visibility};
-use crate::{AuthorizedUsers, StatusCode, PASSWORD};
+use crate::{AuthorizedUsers, HttpHandlerError, StatusCode, PASSWORD};
 
 #[derive(Debug, Error)]
 pub enum DownloadError {
@@ -38,6 +38,8 @@ pub enum DownloadError {
 	#[error("Invalid password")]
 	InvalidPassword,
 }
+
+impl HttpHandlerError for DownloadError {}
 
 pub async fn download(
 	uuid: String,

@@ -7,6 +7,7 @@ use std::task::{Context, Poll};
 use account::{get_logged_in_user, AuthError};
 use backtrace::Backtrace;
 use dashmap::DashMap;
+use error::{HandlerError, HttpHandlerError};
 use hyper::http::HeaderValue;
 use hyper::service::Service;
 use hyper::{Body, Method, Request, Response, StatusCode};
@@ -161,10 +162,13 @@ impl Service<Request<Body>> for AqaService {
 	}
 }
 
-async fn handle_response<E: std::error::Error>(
+async fn handle_response<E>(
 	resp: impl Future<Output = Result<Response<Body>, E>>,
 	origin_header: Option<HeaderValue>,
-) -> Result<Response<Body>, AqaServiceError> {
+) -> Result<Response<Body>, AqaServiceError>
+where
+	E: HttpHandlerError,
+{
 	match resp.await {
 		Ok(mut resp) => {
 			if let Some(hv) = origin_header {
@@ -179,14 +183,7 @@ async fn handle_response<E: std::error::Error>(
 			let backtrace = Backtrace::new();
 			error!("{:?}", backtrace);
 
-			let body = if cfg!(debug_assertions) {
-				Body::from(err.to_string())
-			} else {
-				Body::from("")
-			};
-			Ok(Response::builder()
-				.status(StatusCode::INTERNAL_SERVER_ERROR)
-				.body(body)?)
+			Ok(err.response())
 		}
 	}
 }
@@ -228,15 +225,18 @@ enum WhoamiError {
 	NotLoggedIn,
 }
 
+impl HttpHandlerError for WhoamiError {}
+
 async fn whoami(
 	req: Request<Body>,
 	db: Db,
 	authorized_users: AuthorizedUsers,
-) -> Result<Response<Body>, WhoamiError> {
+) -> Result<Response<Body>, HandlerError<WhoamiError>> {
 	let (parts, _body) = req.into_parts();
 
 	let uploader = get_logged_in_user(&parts.headers, db, authorized_users)
-		.await?
+		.await
+		.map_err(Into::<WhoamiError>::into)?
 		.ok_or(WhoamiError::NotLoggedIn)?;
 
 	Ok(Response::builder()

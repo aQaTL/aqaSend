@@ -1,7 +1,7 @@
 use crate::cookie::parse_cookie;
 use crate::db_stuff::AccountType;
 use crate::error::Field;
-use crate::{cli_commands, Account, AuthorizedUsers, Db};
+use crate::{cli_commands, Account, AuthorizedUsers, Db, HttpHandlerError};
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use bytes::BytesMut;
 use futures::StreamExt;
@@ -34,6 +34,8 @@ pub enum LoginError {
 	#[error("Hash problem")]
 	PasswordHash,
 }
+
+impl HttpHandlerError for LoginError {}
 
 const MAX_REQUEST_BODY_SIZE: usize = 1024 * 5; // 5 KB
 
@@ -129,6 +131,8 @@ pub enum LogoutError {
 	PasswordHash,
 }
 
+impl HttpHandlerError for LogoutError {}
+
 pub async fn logout(
 	_req: Request<Body>,
 	_db: Db,
@@ -204,6 +208,8 @@ pub enum CreateRegistrationCodeError {
 	InsufficientPermissions,
 }
 
+impl HttpHandlerError for CreateRegistrationCodeError {}
+
 pub async fn create_registration_code(
 	req: Request<Body>,
 	db: Db,
@@ -245,6 +251,8 @@ pub enum CreateAccountFromRegistrationCodeError {
 	#[error(transparent)]
 	CreateAccount(#[from] cli_commands::create_account::CreateAccountError),
 }
+
+impl HttpHandlerError for CreateAccountFromRegistrationCodeError {}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CreateAccountModel {
@@ -315,6 +323,8 @@ pub enum CheckRegistrationCodeError {
 	#[error("Invalid registration code")]
 	InvalidRegistrationCode,
 }
+
+impl HttpHandlerError for CheckRegistrationCodeError {}
 
 pub async fn check_registration_code(
 	_req: Request<Body>,

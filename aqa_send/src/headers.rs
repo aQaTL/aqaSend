@@ -34,16 +34,11 @@ pub enum HeaderError {
 	LifetimeParse,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 pub enum Visibility {
+	#[default]
 	Public,
 	Private,
-}
-
-impl Default for Visibility {
-	fn default() -> Self {
-		Visibility::Public
-	}
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]

@@ -6,7 +6,7 @@ use thiserror::Error;
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
-use crate::{db, Account, AccountType, Db, DbError};
+use crate::{db, Account, AccountType, Db, DbError, HttpHandlerError, StatusCode};
 
 pub async fn create_account_cmd(
 	name: String,
@@ -62,8 +62,30 @@ pub enum CreateAccountError {
 	#[error("Entered passwords don't match")]
 	PasswordsDoNotMatch,
 
-	#[error("Failed to hash the password: {0:?}")]
+	#[error("Failed to hash the password")]
 	PasswordHashingError(argon2::password_hash::Error),
+}
+
+impl HttpHandlerError for CreateAccountError {
+	fn code(&self) -> StatusCode {
+		match self {
+			CreateAccountError::FileOperation(_) => StatusCode::INTERNAL_SERVER_ERROR,
+			CreateAccountError::DbError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+			CreateAccountError::AccountAlreadyExists => StatusCode::OK,
+			CreateAccountError::PasswordsDoNotMatch => StatusCode::OK,
+			CreateAccountError::PasswordHashingError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+		}
+	}
+
+	fn user_presentable(&self) -> bool {
+		match self {
+			CreateAccountError::FileOperation(_) => false,
+			CreateAccountError::DbError(_) => false,
+			CreateAccountError::AccountAlreadyExists => true,
+			CreateAccountError::PasswordsDoNotMatch => true,
+			CreateAccountError::PasswordHashingError(_) => true,
+		}
+	}
 }
 
 fn prompt_for_password() -> Result<Zeroizing<String>, CreateAccountError> {

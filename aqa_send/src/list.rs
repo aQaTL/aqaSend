@@ -1,5 +1,5 @@
 use crate::cookie::parse_cookie;
-use crate::{AuthorizedUsers, FileEntry, HttpHandlerError, Lifetime};
+use crate::{AuthorizedUsers, FileEntry, HandlerError, HttpHandlerError, Lifetime};
 use hyper::{Body, Request, Response, StatusCode};
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -8,19 +8,16 @@ use tracing::error;
 use uuid::Uuid;
 
 use crate::db::Db;
-use crate::error::Field;
+use crate::error::{ErrorContentType, Field, IntoHandlerError};
 use crate::headers::Visibility;
 
 #[derive(Debug, Error)]
 pub enum ListError {
 	#[error(transparent)]
-	Http(#[from] hyper::http::Error),
-
-	#[error(transparent)]
 	Json(#[from] serde_json::Error),
 
-	#[error(transparent)]
-	UuidParse(#[from] uuid::Error),
+	#[error("malformed session cookie")]
+	MalformedSessionCookie(uuid::Error),
 
 	#[error("{0:?} must only contain visible ascii characters")]
 	AsciiOnly(Field),
@@ -35,7 +32,33 @@ pub enum ListError {
 	UnknownUser,
 }
 
-impl HttpHandlerError for ListError {}
+impl HttpHandlerError for ListError {
+	fn code(&self) -> StatusCode {
+		match self {
+			ListError::Json(_) => StatusCode::INTERNAL_SERVER_ERROR,
+			ListError::MalformedSessionCookie(_) => StatusCode::BAD_REQUEST,
+			ListError::AsciiOnly(_) => StatusCode::BAD_REQUEST,
+			ListError::Malformed(_) => StatusCode::BAD_REQUEST,
+			ListError::SessionExpired => StatusCode::BAD_REQUEST,
+			ListError::UnknownUser => StatusCode::BAD_REQUEST,
+		}
+	}
+
+	fn user_presentable(&self) -> bool {
+		match self {
+			ListError::Json(_) => false,
+			ListError::MalformedSessionCookie(_) => true,
+			ListError::AsciiOnly(_) => true,
+			ListError::Malformed(_) => true,
+			ListError::SessionExpired => true,
+			ListError::UnknownUser => true,
+		}
+	}
+
+	fn content_type() -> ErrorContentType {
+		ErrorContentType::Json
+	}
+}
 
 #[derive(Serialize)]
 struct FileModel<'a> {
@@ -55,7 +78,7 @@ pub async fn list(
 	req: Request<Body>,
 	db: Db,
 	authorized_users: AuthorizedUsers,
-) -> Result<Response<Body>, ListError> {
+) -> Result<Response<Body>, HandlerError<ListError>> {
 	let uploader = match req.headers().get("Cookie") {
 		Some(cookie) => {
 			let cookie_header = cookie
@@ -66,7 +89,9 @@ pub async fn list(
 			debug!("Cookies: {cookies:?}");
 			match cookies.get("session") {
 				Some(session_cookie) => {
-					let session_cookie: Uuid = session_cookie.parse()?;
+					let session_cookie: Uuid = session_cookie
+						.parse()
+						.map_err(ListError::MalformedSessionCookie)?;
 
 					let user_uuid = authorized_users
 						.get_user_uuid(&session_cookie)
@@ -120,7 +145,8 @@ pub async fn list(
 		serde_json::to_vec_pretty(&list)
 	} else {
 		serde_json::to_vec(&list)
-	}?;
+	}
+	.into_handler_error()?;
 
 	Ok(Response::builder()
 		.status(StatusCode::OK)

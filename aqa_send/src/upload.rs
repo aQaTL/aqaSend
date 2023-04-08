@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::account::{get_logged_in_user, AuthError};
 use crate::db::Db;
 use crate::db_stuff::FileEntry;
-use crate::error::IntoHandlerError;
+use crate::error::{ErrorContentType, IntoHandlerError};
 use crate::headers::{DownloadCount, HeaderError, Lifetime, Password, Visibility, DOWNLOAD_COUNT};
 use crate::{AuthorizedUsers, HandlerError, HttpHandlerError, LIFETIME, PASSWORD, VISIBILITY};
 
@@ -45,7 +45,39 @@ pub enum UploadError {
 	AuthError(#[from] AuthError),
 }
 
-impl HttpHandlerError for UploadError {}
+impl HttpHandlerError for UploadError {
+	fn code(&self) -> StatusCode {
+		match self {
+			UploadError::Multipart(_) => StatusCode::BAD_REQUEST,
+			UploadError::FileCreate(_) => StatusCode::INTERNAL_SERVER_ERROR,
+			UploadError::FileWrite(_) => StatusCode::INTERNAL_SERVER_ERROR,
+			UploadError::InvalidContentType => StatusCode::BAD_REQUEST,
+			UploadError::BoundaryExpected => StatusCode::BAD_REQUEST,
+			UploadError::AqaHeader(err) => err.code(),
+			UploadError::DbSerialize(_) => StatusCode::INTERNAL_SERVER_ERROR,
+			UploadError::PrivateUploadWithoutAccount => StatusCode::UNAUTHORIZED,
+			UploadError::AuthError(err) => err.code(),
+		}
+	}
+
+	fn user_presentable(&self) -> bool {
+		match self {
+			UploadError::Multipart(_) => true,
+			UploadError::FileCreate(_) => false,
+			UploadError::FileWrite(_) => false,
+			UploadError::InvalidContentType => true,
+			UploadError::BoundaryExpected => true,
+			UploadError::AqaHeader(err) => err.user_presentable(),
+			UploadError::DbSerialize(_) => false,
+			UploadError::PrivateUploadWithoutAccount => true,
+			UploadError::AuthError(_) => true,
+		}
+	}
+
+	fn content_type() -> ErrorContentType {
+		ErrorContentType::Json
+	}
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct UploadResponse(pub Vec<UploadedFile>);

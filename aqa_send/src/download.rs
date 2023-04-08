@@ -13,15 +13,14 @@ use uuid::Uuid;
 use crate::account::{get_logged_in_user, AuthError};
 use crate::db::{self, Db};
 use crate::db_stuff::FileEntry;
+use crate::error::{ErrorContentType, IntoHandlerError};
 use crate::headers::{DownloadCount, Password, Visibility};
-use crate::{AuthorizedUsers, HttpHandlerError, StatusCode, PASSWORD};
+use crate::{AuthorizedUsers, HandlerError, HttpHandlerError, StatusCode, PASSWORD};
 
 #[derive(Debug, Error)]
 pub enum DownloadError {
 	#[error(transparent)]
 	FileSendIo(std::io::Error),
-	#[error(transparent)]
-	Http(#[from] hyper::http::Error),
 	#[error("File id is not a valid uuid")]
 	Uuid(#[from] uuid::Error),
 	#[error(transparent)]
@@ -39,15 +38,43 @@ pub enum DownloadError {
 	InvalidPassword,
 }
 
-impl HttpHandlerError for DownloadError {}
+impl HttpHandlerError for DownloadError {
+	fn code(&self) -> StatusCode {
+		match self {
+			DownloadError::FileSendIo(_) => StatusCode::INTERNAL_SERVER_ERROR,
+			DownloadError::Uuid(_) => StatusCode::BAD_REQUEST,
+			DownloadError::Serialization(_) => StatusCode::INTERNAL_SERVER_ERROR,
+			DownloadError::Db(_) => StatusCode::INTERNAL_SERVER_ERROR,
+			DownloadError::AuthError(err) => err.code(),
+			DownloadError::NotFound => StatusCode::NOT_FOUND,
+			DownloadError::InvalidPassword => StatusCode::UNAUTHORIZED,
+		}
+	}
+
+	fn user_presentable(&self) -> bool {
+		match self {
+			DownloadError::FileSendIo(_) => false,
+			DownloadError::Uuid(_) => true,
+			DownloadError::Serialization(_) => false,
+			DownloadError::Db(_) => false,
+			DownloadError::AuthError(err) => err.user_presentable(),
+			DownloadError::NotFound => true,
+			DownloadError::InvalidPassword => true,
+		}
+	}
+
+	fn content_type() -> ErrorContentType {
+		ErrorContentType::Json
+	}
+}
 
 pub async fn download(
 	uuid: String,
 	req: Request<Body>,
 	db: Db,
 	authorized_users: AuthorizedUsers,
-) -> Result<Response<Body>, DownloadError> {
-	let uuid = Uuid::parse_str(&uuid)?;
+) -> Result<Response<Body>, HandlerError<DownloadError>> {
+	let uuid = Uuid::parse_str(&uuid).into_handler_error()?;
 	debug!("Downloading {}", uuid);
 
 	let mut file_entry: FileEntry = db
@@ -56,8 +83,9 @@ pub async fn download(
 		.ok_or(DownloadError::NotFound)?
 		.to_owned();
 
-	let current_user =
-		get_logged_in_user(req.headers(), db.clone(), authorized_users.clone()).await?;
+	let current_user = get_logged_in_user(req.headers(), db.clone(), authorized_users.clone())
+		.await
+		.into_handler_error()?;
 	if matches!(file_entry.visibility, Visibility::Private) {
 		let authorized = match (current_user, file_entry.uploader_uuid) {
 			(Some(current_user), Some(uploader)) => current_user.uuid == uploader,
@@ -76,13 +104,13 @@ pub async fn download(
 			.get(PASSWORD)
 			.ok_or(DownloadError::InvalidPassword)?;
 		if provided_password != password {
-			return Err(DownloadError::InvalidPassword);
+			return Err(DownloadError::InvalidPassword.into());
 		}
 	}
 
 	if let DownloadCount::Count(max_count) = file_entry.download_count_type {
 		if file_entry.download_count >= max_count {
-			return Err(DownloadError::NotFound);
+			return Err(DownloadError::NotFound.into());
 		}
 	}
 
@@ -91,7 +119,9 @@ pub async fn download(
 		file_entry.download_count + 1
 	);
 	file_entry.download_count += 1;
-	db.update(&uuid, file_entry.clone()).await?;
+	db.update(&uuid, file_entry.clone())
+		.await
+		.into_handler_error()?;
 
 	// Make it immutable to prevent unsaved changes
 	let file_entry = file_entry;
@@ -101,7 +131,7 @@ pub async fn download(
 	file_path.push(uuid.to_string());
 
 	if !file_path.exists() {
-		return Err(DownloadError::NotFound);
+		return Err(DownloadError::NotFound.into());
 	}
 
 	let file = tokio::fs::File::open(&file_path)

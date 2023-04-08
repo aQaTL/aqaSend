@@ -1,6 +1,6 @@
 use crate::cookie::parse_cookie;
 use crate::db_stuff::AccountType;
-use crate::error::{Field, IntoHandlerError};
+use crate::error::{ErrorContentType, Field, IntoHandlerError};
 use crate::{cli_commands, Account, AuthorizedUsers, Db, HandlerError, HttpHandlerError};
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use bytes::BytesMut;
@@ -31,7 +31,19 @@ pub enum LoginError {
 	PasswordHash,
 }
 
-impl HttpHandlerError for LoginError {}
+impl HttpHandlerError for LoginError {
+	fn code(&self) -> StatusCode {
+		StatusCode::BAD_REQUEST
+	}
+
+	fn user_presentable(&self) -> bool {
+		true
+	}
+
+	fn content_type() -> ErrorContentType {
+		ErrorContentType::Json
+	}
+}
 
 const MAX_REQUEST_BODY_SIZE: usize = 1024 * 5; // 5 KB
 
@@ -139,7 +151,7 @@ pub enum AuthError {
 	#[error("Malformed {0:?} data")]
 	Malformed(Field),
 
-	#[error(transparent)]
+	#[error("malformed uuid")]
 	UuidParse(#[from] uuid::Error),
 
 	#[error("Session expired")]
@@ -147,6 +159,22 @@ pub enum AuthError {
 
 	#[error("Authorized user doesn't exist")]
 	UnknownUser,
+}
+
+impl HttpHandlerError for AuthError {
+	fn code(&self) -> StatusCode {
+		match self {
+			AuthError::AsciiOnly(_) => StatusCode::BAD_REQUEST,
+			AuthError::Malformed(_) => StatusCode::BAD_REQUEST,
+			AuthError::UuidParse(_) => StatusCode::BAD_REQUEST,
+			AuthError::SessionExpired => StatusCode::UNAUTHORIZED,
+			AuthError::UnknownUser => StatusCode::UNAUTHORIZED,
+		}
+	}
+
+	fn user_presentable(&self) -> bool {
+		true
+	}
 }
 
 pub async fn get_logged_in_user(
@@ -195,7 +223,27 @@ pub enum CreateRegistrationCodeError {
 	InsufficientPermissions,
 }
 
-impl HttpHandlerError for CreateRegistrationCodeError {}
+impl HttpHandlerError for CreateRegistrationCodeError {
+	fn code(&self) -> StatusCode {
+		match self {
+			CreateRegistrationCodeError::AuthError(err) => err.code(),
+			CreateRegistrationCodeError::Unauthorized => StatusCode::UNAUTHORIZED,
+			CreateRegistrationCodeError::InsufficientPermissions => StatusCode::UNAUTHORIZED,
+		}
+	}
+
+	fn user_presentable(&self) -> bool {
+		match self {
+			CreateRegistrationCodeError::AuthError(err) => err.user_presentable(),
+			CreateRegistrationCodeError::Unauthorized => true,
+			CreateRegistrationCodeError::InsufficientPermissions => true,
+		}
+	}
+
+	fn content_type() -> ErrorContentType {
+		ErrorContentType::Json
+	}
+}
 
 pub async fn create_registration_code(
 	req: Request<Body>,
@@ -234,7 +282,27 @@ pub enum CreateAccountFromRegistrationCodeError {
 	CreateAccount(#[from] cli_commands::create_account::CreateAccountError),
 }
 
-impl HttpHandlerError for CreateAccountFromRegistrationCodeError {}
+impl HttpHandlerError for CreateAccountFromRegistrationCodeError {
+	fn code(&self) -> StatusCode {
+		match self {
+			CreateAccountFromRegistrationCodeError::InvalidRegistrationCode => StatusCode::OK,
+			CreateAccountFromRegistrationCodeError::RequestTooBig => StatusCode::PAYLOAD_TOO_LARGE,
+			CreateAccountFromRegistrationCodeError::CreateAccount(err) => err.code(),
+		}
+	}
+
+	fn user_presentable(&self) -> bool {
+		match self {
+			CreateAccountFromRegistrationCodeError::InvalidRegistrationCode => true,
+			CreateAccountFromRegistrationCodeError::RequestTooBig => true,
+			CreateAccountFromRegistrationCodeError::CreateAccount(err) => err.user_presentable(),
+		}
+	}
+
+	fn content_type() -> ErrorContentType {
+		ErrorContentType::Json
+	}
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CreateAccountModel {
@@ -304,7 +372,23 @@ pub enum CheckRegistrationCodeError {
 	InvalidRegistrationCode,
 }
 
-impl HttpHandlerError for CheckRegistrationCodeError {}
+impl HttpHandlerError for CheckRegistrationCodeError {
+	fn code(&self) -> StatusCode {
+		match self {
+			CheckRegistrationCodeError::InvalidRegistrationCode => StatusCode::NOT_FOUND,
+		}
+	}
+
+	fn user_presentable(&self) -> bool {
+		match self {
+			CheckRegistrationCodeError::InvalidRegistrationCode => true,
+		}
+	}
+
+	fn content_type() -> ErrorContentType {
+		ErrorContentType::Json
+	}
+}
 
 pub async fn check_registration_code(
 	_req: Request<Body>,

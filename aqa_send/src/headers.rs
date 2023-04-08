@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::files::DIRS_BY_DOWNLOAD_COUNT;
+use crate::{HttpHandlerError, StatusCode};
 
 pub const VISIBILITY: &str = "aqa-visibility";
 pub const DOWNLOAD_COUNT: &str = "aqa-download-count";
@@ -32,6 +33,16 @@ pub enum HeaderError {
 	VisibilityParse,
 	#[error("Invalid aqa-lifetime header value")]
 	LifetimeParse,
+}
+
+impl HttpHandlerError for HeaderError {
+	fn code(&self) -> StatusCode {
+		StatusCode::BAD_REQUEST
+	}
+
+	fn user_presentable(&self) -> bool {
+		true
+	}
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]

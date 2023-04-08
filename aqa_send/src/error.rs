@@ -10,8 +10,6 @@ pub enum Field {
 	ContentType,
 }
 
-// TODO better error types. Something that works well with http responses.
-
 pub trait HttpHandlerError: Display + std::fmt::Debug + std::error::Error
 where
 	Self: Sized,
@@ -58,82 +56,26 @@ where
 	}
 }
 
+pub trait IntoHandlerError<T, E> {
+	fn into_handler_error(self) -> Result<T, HandlerError<E>>;
+}
+
+impl<T, E, EE> IntoHandlerError<T, EE> for Result<T, E>
+where
+	E: Into<EE>,
+	EE: HttpHandlerError,
+{
+	fn into_handler_error(self) -> Result<T, HandlerError<EE>> {
+		self.map_err(|err| HandlerError::from(err.into()))
+	}
+}
+
 #[derive(Copy, Clone)]
 pub enum ErrorContentType {
 	PlainText,
 	Json,
 	Http,
 }
-
-// #[derive(Debug, Error)]
-// pub enum HandlerErrorDyn {
-// 	Http(hyper::http::Error),
-// 	Hyper(hyper::Error),
-// 	Handler(Box<dyn HttpHandlerError>),
-// }
-//
-// trait IntoHandlerErrorDyn: HttpHandlerError {
-//     fn into_handler_error(self) -> HandlerErrorDyn {
-//         HandlerErrorDyn::Handler(Box::new(self))
-//     }
-// }
-//
-// impl Display for HandlerErrorDyn {
-// 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-// 		match self {
-// 			HandlerErrorDyn::Http(_) => write!(f, "http layer error"),
-// 			HandlerErrorDyn::Hyper(_) => write!(f, "http framework error"),
-// 			HandlerErrorDyn::Handler(err) => err.fmt(f),
-// 		}
-// 	}
-// }
-//
-// impl From<hyper::http::Error> for HandlerErrorDyn {
-// 	fn from(v: hyper::http::Error) -> Self {
-// 		HandlerErrorDyn::Http(v)
-// 	}
-// }
-//
-// impl From<hyper::Error> for HandlerErrorDyn {
-// 	fn from(v: hyper::Error) -> Self {
-// 		HandlerErrorDyn::Hyper(v)
-// 	}
-// }
-
-// impl HttpHandlerError for HandlerErrorDyn {
-// 	fn code(&self) -> StatusCode {
-// 		match self {
-// 			HandlerError::Http(_) | HandlerError::Hyper(_) => StatusCode::INTERNAL_SERVER_ERROR,
-// 			HandlerError::Handler(err) => err.code(),
-// 		}
-// 	}
-//
-// 	fn user_presentable(&self) -> bool {
-// 		match self {
-// 			HandlerError::Http(_) | HandlerError::Hyper(_) => false,
-// 			HandlerError::Handler(err) => err.user_presentable(),
-// 		}
-// 	}
-//
-// 	fn content_type(&self) -> ErrorContentType {
-// 		self.content_type()
-// 	}
-// }
-
-// #[derive(Debug, Error)]
-// pub struct HandlerError<Err> {
-// 	kind: HandlerErrorKind<Err>,
-// 	content_type: ErrorContentType,
-// }
-//
-// impl<Err> From<hyper::http::Error> for HandlerError<Err> {
-// 	fn from(v: hyper::http::Error) -> Self {
-// 		HandlerError {
-// 			kind: HandlerErrorKind::Http(v)
-// 			content_type: Error
-// 		}
-// 	}
-// }
 
 #[derive(Debug, Error)]
 pub enum HandlerError<Err> {

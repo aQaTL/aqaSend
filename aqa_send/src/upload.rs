@@ -11,14 +11,12 @@ use uuid::Uuid;
 use crate::account::{get_logged_in_user, AuthError};
 use crate::db::Db;
 use crate::db_stuff::FileEntry;
+use crate::error::IntoHandlerError;
 use crate::headers::{DownloadCount, HeaderError, Lifetime, Password, Visibility, DOWNLOAD_COUNT};
-use crate::{AuthorizedUsers, HttpHandlerError, LIFETIME, PASSWORD, VISIBILITY};
+use crate::{AuthorizedUsers, HandlerError, HttpHandlerError, LIFETIME, PASSWORD, VISIBILITY};
 
 #[derive(Debug, Error)]
 pub enum UploadError {
-	#[error(transparent)]
-	Http(#[from] hyper::http::Error),
-
 	#[error(transparent)]
 	Multipart(#[from] MultipartError),
 
@@ -62,7 +60,7 @@ pub async fn upload(
 	req: Request<Body>,
 	db: Db,
 	authorized_users: AuthorizedUsers,
-) -> Result<Response<Body>, UploadError> {
+) -> Result<Response<Body>, HandlerError<UploadError>> {
 	use UploadError::{BoundaryExpected, FileCreate, FileWrite, InvalidContentType};
 
 	let (parts, body) = req.into_parts();
@@ -82,19 +80,34 @@ pub async fn upload(
 	let boundary = format!("--{}", boundary);
 	debug!("Boundary: {}", boundary);
 
-	let uploader = get_logged_in_user(&parts.headers, db.clone(), authorized_users.clone()).await?;
+	let uploader = get_logged_in_user(&parts.headers, db.clone(), authorized_users.clone())
+		.await
+		.into_handler_error()?;
 
-	let download_count: DownloadCount = parts.headers.get(DOWNLOAD_COUNT).try_into()?;
+	let download_count: DownloadCount = parts
+		.headers
+		.get(DOWNLOAD_COUNT)
+		.try_into()
+		.into_handler_error()?;
 	let password: Option<Password> = parts
 		.headers
 		.get(PASSWORD)
 		.map(|v| v.try_into())
-		.transpose()?;
-	let visibility: Visibility = parts.headers.get(VISIBILITY).try_into()?;
-	let lifetime: Lifetime = parts.headers.get(LIFETIME).try_into()?;
+		.transpose()
+		.into_handler_error()?;
+	let visibility: Visibility = parts
+		.headers
+		.get(VISIBILITY)
+		.try_into()
+		.into_handler_error()?;
+	let lifetime: Lifetime = parts
+		.headers
+		.get(LIFETIME)
+		.try_into()
+		.into_handler_error()?;
 
 	if let (None, Visibility::Private) = (&uploader, visibility) {
-		return Err(UploadError::PrivateUploadWithoutAccount);
+		return Err(UploadError::PrivateUploadWithoutAccount.into());
 	}
 
 	let mut multipart = Multipart {
@@ -109,7 +122,7 @@ pub async fn upload(
 		let header = match multipart.read_header().await {
 			Ok(v) => v,
 			Err(MultipartError::NotEnoughData) => break,
-			Err(err) => return Err(err.into()),
+			Err(err) => return Err(err).into_handler_error(),
 		};
 		info!("Uploading {}", header.file_name);
 
@@ -141,7 +154,7 @@ pub async fn upload(
 		db.put(upload_uuid, file_entry.clone()).await;
 
 		while let Some(chunk) = multipart.read_data().await {
-			let chunk = chunk?;
+			let chunk = chunk.into_handler_error()?;
 			file.write_all(&chunk).await.map_err(FileWrite)?;
 		}
 
@@ -154,7 +167,8 @@ pub async fn upload(
 
 	let upload_response = UploadResponse(uploaded_files);
 	let upload_response_json =
-		tokio::task::block_in_place(|| serde_json::to_vec_pretty(&upload_response))?;
+		tokio::task::block_in_place(|| serde_json::to_vec_pretty(&upload_response))
+			.into_handler_error()?;
 
 	Ok(Response::builder()
 		.status(StatusCode::OK)

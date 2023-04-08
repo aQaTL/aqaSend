@@ -1,7 +1,7 @@
 use crate::cookie::parse_cookie;
 use crate::db_stuff::AccountType;
-use crate::error::Field;
-use crate::{cli_commands, Account, AuthorizedUsers, Db, HttpHandlerError};
+use crate::error::{Field, IntoHandlerError};
+use crate::{cli_commands, Account, AuthorizedUsers, Db, HandlerError, HttpHandlerError};
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use bytes::BytesMut;
 use futures::StreamExt;
@@ -17,10 +17,6 @@ use zeroize::Zeroizing;
 
 #[derive(Debug, Error)]
 pub enum LoginError {
-	#[error(transparent)]
-	Http(#[from] hyper::http::Error),
-	#[error(transparent)]
-	Hyper(#[from] hyper::Error),
 	#[error("Unsupported payload format")]
 	ExpectedJson,
 	#[error("Username is missing from request body")]
@@ -43,7 +39,7 @@ pub async fn login(
 	req: Request<Body>,
 	db: Db,
 	authorized_users: AuthorizedUsers,
-) -> Result<Response<Body>, LoginError> {
+) -> Result<Response<Body>, HandlerError<LoginError>> {
 	// if !req.headers().get("Content-Type").map(|ct| ct == "application/json").unwrap_or_default() {
 	//     return Err(LoginError::ExpectedJson);
 	// }
@@ -56,7 +52,7 @@ pub async fn login(
 	while let Some(data) = body.data().await {
 		let data = data?;
 		if body_vec.len() + data.len() > MAX_REQUEST_BODY_SIZE {
-			return Err(LoginError::BodyTooBig);
+			return Err(LoginError::BodyTooBig.into());
 		}
 		body_vec.extend_from_slice(&data);
 	}
@@ -106,12 +102,6 @@ pub async fn login(
 
 #[derive(Debug, Error)]
 pub enum LogoutError {
-	#[error(transparent)]
-	Http(#[from] hyper::http::Error),
-
-	#[error(transparent)]
-	Hyper(#[from] hyper::Error),
-
 	#[error("Unsupported payload format")]
 	ExpectedJson,
 
@@ -137,7 +127,7 @@ pub async fn logout(
 	_req: Request<Body>,
 	_db: Db,
 	_authorized_users: AuthorizedUsers,
-) -> Result<Response<Body>, LogoutError> {
+) -> Result<Response<Body>, HandlerError<LogoutError>> {
 	todo!()
 }
 
@@ -196,9 +186,6 @@ pub async fn get_logged_in_user(
 #[derive(Debug, Error)]
 pub enum CreateRegistrationCodeError {
 	#[error(transparent)]
-	Http(#[from] hyper::http::Error),
-
-	#[error(transparent)]
 	AuthError(#[from] AuthError),
 
 	#[error("You must be logged in to do that")]
@@ -214,13 +201,14 @@ pub async fn create_registration_code(
 	req: Request<Body>,
 	db: Db,
 	authorized_users: AuthorizedUsers,
-) -> Result<Response<Body>, CreateRegistrationCodeError> {
+) -> Result<Response<Body>, HandlerError<CreateRegistrationCodeError>> {
 	let current_user = get_logged_in_user(req.headers(), db.clone(), authorized_users.clone())
-		.await?
+		.await
+		.into_handler_error()?
 		.ok_or(CreateRegistrationCodeError::Unauthorized)?;
 
 	if !matches!(current_user.acc_type, AccountType::Admin) {
-		return Err(CreateRegistrationCodeError::InsufficientPermissions);
+		return Err(CreateRegistrationCodeError::InsufficientPermissions.into());
 	}
 
 	let registration_code = Uuid::new_v4().to_string();
@@ -236,12 +224,6 @@ pub async fn create_registration_code(
 
 #[derive(Debug, Error)]
 pub enum CreateAccountFromRegistrationCodeError {
-	#[error(transparent)]
-	Http(#[from] hyper::http::Error),
-
-	#[error(transparent)]
-	Hyper(#[from] hyper::Error),
-
 	#[error("Invalid registration code")]
 	InvalidRegistrationCode,
 
@@ -270,7 +252,7 @@ pub async fn create_account_from_registration_code(
 	req: Request<Body>,
 	db: Db,
 	authorized_users: AuthorizedUsers,
-) -> Result<Response<Body>, CreateAccountFromRegistrationCodeError> {
+) -> Result<Response<Body>, HandlerError<CreateAccountFromRegistrationCodeError>> {
 	let (_parts, mut body) = req.into_parts();
 
 	debug!("Reading body");
@@ -278,7 +260,7 @@ pub async fn create_account_from_registration_code(
 	while let Some(chunk) = body.next().await {
 		let chunk = chunk?;
 		if req_body.len() + chunk.len() > MAX_REQUEST_BODY_SIZE {
-			return Err(CreateAccountFromRegistrationCodeError::RequestTooBig);
+			return Err(CreateAccountFromRegistrationCodeError::RequestTooBig.into());
 		}
 		req_body.extend_from_slice(&chunk);
 	}
@@ -286,7 +268,7 @@ pub async fn create_account_from_registration_code(
 	debug!("Validating registration code");
 	let create_account: CreateAccountModel = serde_json::from_slice(&req_body).unwrap();
 	if !registration_code_valid(&db, &create_account.registration_code).await {
-		return Err(CreateAccountFromRegistrationCodeError::InvalidRegistrationCode);
+		return Err(CreateAccountFromRegistrationCodeError::InvalidRegistrationCode.into());
 	}
 
 	debug!("Creating account");
@@ -296,7 +278,8 @@ pub async fn create_account_from_registration_code(
 		AccountType::User,
 		Zeroizing::new(create_account.password),
 	)
-	.await?;
+	.await
+	.into_handler_error()?;
 
 	let new_account = CreateAccountResponse { uuid };
 	let response_body = serde_json::to_string_pretty(&new_account).unwrap();
@@ -317,9 +300,6 @@ pub async fn create_account_from_registration_code(
 
 #[derive(Debug, Error)]
 pub enum CheckRegistrationCodeError {
-	#[error(transparent)]
-	Http(#[from] hyper::http::Error),
-
 	#[error("Invalid registration code")]
 	InvalidRegistrationCode,
 }
@@ -330,9 +310,9 @@ pub async fn check_registration_code(
 	_req: Request<Body>,
 	registration_code: String,
 	db: Db,
-) -> Result<Response<Body>, CheckRegistrationCodeError> {
+) -> Result<Response<Body>, HandlerError<CheckRegistrationCodeError>> {
 	if !registration_code_valid(&db, &registration_code).await {
-		return Err(CheckRegistrationCodeError::InvalidRegistrationCode);
+		return Err(CheckRegistrationCodeError::InvalidRegistrationCode.into());
 	}
 
 	Ok(Response::builder()

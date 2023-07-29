@@ -23,13 +23,15 @@
 			Sample message
 		</div>
 		<form id="uploadForm">
-			<section class="parameters">
+			<section class="uploadFormSection">
 				<label for="visibility-select"">Visibility</label>
 				<select name="visibility" id="visibility-select">
 					<option value="public">Public</option>
 					<option value="private">Private</option>
 				</select>
+			</section>
 
+			<section class="uploadFormSection">
 				<label for="lifetime-select">Lifetime</label>
 				<select name="lifetime" id="lifetime-select">
 					<option value="infinite">Infinite</option>
@@ -40,7 +42,9 @@
 					<option value="7 days">7 days</option>
 					<option value="30 days">30 days</option>
 				</select>
+			</section>
 
+			<section class="uploadFormSection">
 				<label for="download-count-select">Download count</label>
 				<select name="download-count" id="download-count-select">
 					<option value="infinite">Infinite</option>
@@ -52,16 +56,21 @@
 					<option value="10">10</option>
 					<option value="100">100</option>
 				</select>
+			</section>
 
+			<section class="uploadFormSection">
 				<label for="password">Password</label>
 				<input type="password" id="password" name="password" />
 			</section>
 
-			<section class="file-upload-box">
-				<input type="file" id="file" name="filename">
+			<section class="uploadFormSection">
+				<div id="fileUploadContainer">
+					<label for="file" class="fileUploadBox">📂 Select files</label>
+					<input type="file" id="file" name="filename">
+				</div>
 			</section>
 
-			<section>
+			<section class="uploadFormSection">
 				<input type="submit" value="Upload" />
 			</section>
 		</form>

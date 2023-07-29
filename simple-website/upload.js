@@ -69,6 +69,7 @@ function submitUploadForm(event) {
 	if (password.trim().length != 0)  {
 		request.setRequestHeader("aqa-password", password);
 	}
+	hideInfoMsg();
 	request.send(formData);
 }
 
@@ -99,4 +100,12 @@ function displayInfoMsg(msg, result) {
 			
 		} break;
 	}
+}
+
+/**
+ * Hides the infoMsg box
+*/
+function hideInfoMsg() {
+	let infoMsgEl = document.getElementById("infoMsg");
+	infoMsgEl.style.display = "none";
 }

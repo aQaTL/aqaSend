@@ -43,9 +43,13 @@ function submitUploadForm(event) {
 		/** @type [{Types.UploadedFile}] */
 		const response = event.target.response;
 
-		console.log("success: " + JSON.stringify(response));
-
-		displayInfoMsg(`Successfully uploaded ${response.length} files`, UPLOAD_RESULT_SUCCESS);
+		if (request.status == 200) {
+			console.log("success: " + JSON.stringify(response));
+			displayInfoMsg(`Successfully uploaded ${response.length} files`, UPLOAD_RESULT_SUCCESS);
+		} else {
+			console.error("error: " + JSON.stringify(response));
+			displayInfoMsg(`Upload failed: ${response.message}`, UPLOAD_RESULT_FAILURE);
+		}
 	});
 
 	request.addEventListener("error", (event) => {
@@ -53,7 +57,6 @@ function submitUploadForm(event) {
 		const response = event.target.response;
 
 		console.error("error: " + JSON.stringify(response));
-
 		displayInfoMsg(`Upload failed: ${response.message}`, UPLOAD_RESULT_FAILURE);
 	});
 

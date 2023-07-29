@@ -185,6 +185,45 @@ main {
 	background-color: var(--item-bg-color);
 }
 
+/* ===================== Files ===================== */
+
+#fileEntries {
+	display: grid;
+	grid-row-gap: 0.5em;
+}
+
+.fileEntry {
+	
+}
+
+.fileEntry:hover {
+	background-color: var(--item-bg-color);
+	cursor: pointer;
+}
+
+.fileEntry a {
+	color: var(--main-color);
+	text-decoration: none;
+}
+
+.fileEntryFilename {
+	font-size: 16pt;
+	color: var(--main-color);
+	font-weight: bold;
+}
+
+.fileEntry div {
+	margin-left: 0.5em;
+}
+
+a:visited {
+	text-decoration: none;
+}
+
+.fileEntryPrivate {
+	border: 2px solid gold;
+}
+
 /* ===================== Mobile version ===================== */
 
 @media screen and (max-width: 570px) {

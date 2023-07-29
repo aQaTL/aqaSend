@@ -35,33 +35,45 @@ function loadFiles() {
  * @param {[Types.FileModel]} files - list of files
  */
 function displayFiles(files) {
-	let html = "";
-	let mainEl = document.getElementsByTagName("main")[0];
+	let fileEntriesEl = document.getElementById("fileEntries");
 	for (let i = 0; i < files.length; i++) {
 		const file = files[i];
 
 		let fileEntryEl = document.createElement("div");
+		fileEntryEl.className = "fileEntry";
 
 		let fileLinkEl = document.createElement("a");
 		fileLinkEl.href = `${API_SERVER}/api/download/${file.id}`;
-		fileLinkEl.appendChild(document.createTextNode(file.filename));
-		fileEntryEl.appendChild(fileLinkEl);
+
+		let filenameEl = document.createElement("div");
+		filenameEl.className = "fileEntryFilename";
+		filenameEl.appendChild(document.createTextNode(file.filename));
+		fileLinkEl.appendChild(filenameEl);
+
+
+		if (file.visibility == "Private") {
+			fileEntryEl.className += " fileEntryPrivate";
+		}
 
 		let statsEl = document.createElement("div");
 		{
 			let div = document.createElement("div");
-			div.appendChild(document.createTextNode("lifetime: " + file.lifetime));
+			
+			let lifetime;
+			if ((typeof file.lifetime) == "object") {
+				lifetime = formatDuration(file.lifetime.Duration.secs * 1000);
+			} else {
+				lifetime = file.lifetime;
+			}
+
+			div.appendChild(document.createTextNode("lifetime: " + lifetime));
 			statsEl.appendChild(div);
 		}
 		{
 			let div = document.createElement("div");
-			div.appendChild(document.createTextNode("visibility: " + file.visibility));
-			statsEl.appendChild(div);
-		}
-		{
-			let div = document.createElement("div");
+			const uploadDate = new Date(file.upload_date.secs_since_epoch * 1000);
 			div.appendChild(document.createTextNode(
-				"upload date: " + JSON.stringify(file.upload_date)
+				`upload date: ${uploadDate.toLocaleDateString()} ${uploadDate.toLocaleTimeString()}`
 			));
 			statsEl.appendChild(div);
 		}
@@ -72,16 +84,25 @@ function displayFiles(files) {
 			));
 			statsEl.appendChild(div);
 		}
-		{
-			let div = document.createElement("div");
-			div.appendChild(document.createTextNode(
-				"download count type: " + JSON.stringify(file.download_count_type)
-			));
-			statsEl.appendChild(div);
-		}
-		fileEntryEl.appendChild(statsEl);
+		fileLinkEl.appendChild(statsEl);
 
-		mainEl.appendChild(fileEntryEl);
+		fileEntryEl.appendChild(fileLinkEl);
+
+		fileEntriesEl.appendChild(fileEntryEl);
 	}
 
+}
+
+function formatDuration(ms) {
+	const time = {
+		day: Math.floor(ms / 86400000),
+		hour: Math.floor(ms / 3600000) % 24,
+		minute: Math.floor(ms / 60000) % 60,
+		second: Math.floor(ms / 1000) % 60,
+		millisecond: Math.floor(ms) % 1000
+	};
+	return Object.entries(time)
+		.filter(val => val[1] !== 0)
+		.map(([key, val]) => `${val} ${key}${val !== 1 ? "s" : ""}`)
+		.join(", ");
 }

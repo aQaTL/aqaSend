@@ -28,7 +28,13 @@
  * @property {string} password - 
  *
  * @property {Lifetime} lifetime - 
- * @property {string} upload_date - 
+ * @property {Date} upload_date - 
+*/
+
+/**
+* @typedef Date
+* @property {number} secs_since_epoch -
+* @property {number} nanos_since_epoch - 
 */
 
 

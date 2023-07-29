@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<title>aQaSend</title>
+	<link rel="icon" href="/favicon.png" />
+	<link rel="stylesheet" href="/index.css" /> 
+</head>
+
+<body>
+	<div id="greeting"></div>
+
+	<nav>
+		<a class="menuLink" href="/files.html">Files</a>
+		<a class="menuLink" href="/my_files.html">My Files</a>
+		<a class="menuLink" href="/upload.html">Upload</a>
+		<a class="menuLink" href="/log_in.html">Log in</a>
+	</nav>
+
+	<main>
+		<form id="loginForm" enctype="application/x-www-form-urlencoded">
+			<input type="text" name="username" placeholder="username" />
+			<input type="password" name="password" placeholder="password" />
+			<input type="submit" value="Log in" />
+		</form>
+	</main>
+
+	<script type="module" src="/log_in.js"></script>
+</body>
+</html>

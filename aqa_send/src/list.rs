@@ -141,6 +141,8 @@ pub async fn list(
 		})
 		.collect();
 
+	debug!("Serving file list ({} files)", list.len());
+
 	let resp = if cfg!(debug_assertions) {
 		serde_json::to_vec_pretty(&list)
 	} else {

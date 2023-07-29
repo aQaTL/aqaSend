@@ -1,0 +1,99 @@
+"use strict";
+
+import * as Types from  "./models.mjs";
+import { API_SERVER } from "./api.mjs";
+
+function main() {
+	let uploadFormEl = document.getElementById("uploadForm");
+	uploadFormEl.addEventListener("submit", submitUploadForm);
+}
+
+window.addEventListener("DOMContentLoaded", function(_event) {
+	let greetingEl = document.getElementById("greeting");
+	greetingEl.innerHTML = `Upload`;
+	main();
+});
+
+/**
+ * Tries to submit the upload form
+ *
+ * @param {SubmitEvent} event - Event fired when clicked on submit
+*/
+function submitUploadForm(event) {
+	event.preventDefault();
+
+	console.log("Clicked to submit!");
+
+	const submitFormEl = event.target;
+
+	const visibility = submitFormEl["visibility-select"].value;
+	const downloadCount = submitFormEl["download-count-select"].value;
+	const lifetime = submitFormEl["lifetime-select"].value;
+	/** @type string */
+	const password = submitFormEl["password"].value;
+
+	const fileInputEl = submitFormEl["file"]
+	const formData = new FormData();
+	for (let i = 0; i < fileInputEl.files.length; i++) {
+		formData.append("file", fileInputEl.files[i], fileInputEl.files[i].name);
+	}
+
+	const request = new XMLHttpRequest();
+	request.addEventListener("load", (event) => {
+		/** @type [{Types.UploadedFile}] */
+		const response = event.target.response;
+
+		console.log("success: " + JSON.stringify(response));
+
+		displayInfoMsg(`Successfully uploaded ${response.length} files`, UPLOAD_RESULT_SUCCESS);
+	});
+
+	request.addEventListener("error", (event) => {
+		/** @type {Types.ErrorJsonBody} */
+		const response = event.target.response;
+
+		console.error("error: " + JSON.stringify(response));
+
+		displayInfoMsg(`Upload failed: ${response.message}`, UPLOAD_RESULT_FAILURE);
+	});
+
+
+	request.responseType = "json";
+	request.open("POST", `${API_SERVER}/api/upload`);
+	request.setRequestHeader("aqa-download-count", downloadCount);
+	request.setRequestHeader("aqa-lifetime", lifetime);
+	request.setRequestHeader("aqa-visibility", visibility);
+	if (password.trim().length != 0)  {
+		request.setRequestHeader("aqa-password", password);
+	}
+	request.send(formData);
+}
+
+const UPLOAD_RESULT_SUCCESS = 0;
+const UPLOAD_RESULT_FAILURE = 1;
+
+/**
+ * Displays a block with info operation result.
+ * 
+ * @param {string} msg - Message to display in the box 
+ * @param {number} result - One of: [UPLOAD_RESULT_SUCCESS, UPLOAD_RESULT_FAILURE]
+*/
+function displayInfoMsg(msg, result) {
+	let infoMsgEl = document.getElementById("infoMsg");
+	switch (result) {
+		case UPLOAD_RESULT_SUCCESS:
+		{
+			infoMsgEl.style.display = "block";
+			infoMsgEl.className = "infoMsgSuccess";
+			infoMsgEl.innerText = msg;
+			
+		} break;
+		case UPLOAD_RESULT_FAILURE:
+		{
+			infoMsgEl.style.display = "block";
+			infoMsgEl.className = "infoMsgFailure";
+			infoMsgEl.innerText = msg;
+			
+		} break;
+	}
+}

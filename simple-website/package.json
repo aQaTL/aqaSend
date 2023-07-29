@@ -1,0 +1,14 @@
+{
+  "name": "aqasend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "check": "npx jsdoc index.js"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "jsdoc": "^4.0.2"
+  }
+}

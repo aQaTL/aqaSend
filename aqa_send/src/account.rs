@@ -1,11 +1,12 @@
 use crate::cookie::parse_cookie;
 use crate::db_stuff::AccountType;
 use crate::error::{ErrorContentType, Field, IntoHandlerError};
+use crate::multipart::{Multipart, MultipartError};
 use crate::{cli_commands, Account, AuthorizedUsers, Db, HandlerError, HttpHandlerError};
+
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use bytes::BytesMut;
 use futures::StreamExt;
-use hyper::body::HttpBody;
 use hyper::http::HeaderValue;
 use hyper::{Body, HeaderMap, Request, Response, StatusCode};
 use log::debug;
@@ -17,23 +18,48 @@ use zeroize::Zeroizing;
 
 #[derive(Debug, Error)]
 pub enum LoginError {
-	#[error("Unsupported payload format")]
-	ExpectedJson,
-	#[error("Username is missing from request body")]
-	ExpectedUsername,
-	#[error("Password is missing from request body")]
-	ExpectedPassword,
-	#[error("Request body is too big")]
-	BodyTooBig,
 	#[error("Invalid username or password")]
 	LoginFail,
+
+	#[error("Upload requires `multipart/form-data` Content-Type")]
+	InvalidContentType,
+
+	#[error("Multipart/form-data upload must define a boundary")]
+	BoundaryExpected,
+
+	#[error(transparent)]
+	Multipart(#[from] MultipartError),
+
+	#[error("Username is missing from request body")]
+	ExpectedUsername,
+
+	#[error("Password is missing from request body")]
+	ExpectedPassword,
+
+	#[error("Request body is too big")]
+	BodyTooBig,
+
 	#[error("Hash problem")]
 	PasswordHash,
+
+	#[error("Expected a valid utf-8 sequence in: {place}")]
+	Utf8 { place: &'static str },
 }
 
 impl HttpHandlerError for LoginError {
 	fn code(&self) -> StatusCode {
-		StatusCode::BAD_REQUEST
+		match self {
+			LoginError::LoginFail => StatusCode::UNAUTHORIZED,
+
+			LoginError::Multipart(_) => StatusCode::BAD_REQUEST,
+			LoginError::InvalidContentType => StatusCode::BAD_REQUEST,
+			LoginError::BoundaryExpected => StatusCode::BAD_REQUEST,
+			LoginError::ExpectedUsername => StatusCode::BAD_REQUEST,
+			LoginError::ExpectedPassword => StatusCode::BAD_REQUEST,
+			LoginError::BodyTooBig => StatusCode::BAD_REQUEST,
+			LoginError::PasswordHash => StatusCode::BAD_REQUEST,
+			LoginError::Utf8 { .. } => StatusCode::BAD_REQUEST,
+		}
 	}
 
 	fn user_presentable(&self) -> bool {
@@ -52,31 +78,49 @@ pub async fn login(
 	db: Db,
 	authorized_users: AuthorizedUsers,
 ) -> Result<Response<Body>, HandlerError<LoginError>> {
-	// if !req.headers().get("Content-Type").map(|ct| ct == "application/json").unwrap_or_default() {
-	//     return Err(LoginError::ExpectedJson);
-	// }
+	use LoginError::{BoundaryExpected, InvalidContentType};
 
-	let (_parts, mut body): (_, Body) = req.into_parts();
+	let (parts, body): (_, Body) = req.into_parts();
 
-	let mut body_vec = Vec::with_capacity(MAX_REQUEST_BODY_SIZE);
+	let content_type = parts
+		.headers
+		.get("content-type")
+		.ok_or(InvalidContentType)?
+		.to_str()
+		.map_err(|_| InvalidContentType)?;
 
-	debug!("Reading body");
-	while let Some(data) = body.data().await {
-		let data = data?;
-		if body_vec.len() + data.len() > MAX_REQUEST_BODY_SIZE {
-			return Err(LoginError::BodyTooBig.into());
+	let boundary = content_type
+		.strip_prefix("multipart/form-data; ")
+		.ok_or(BoundaryExpected)?
+		.strip_prefix("boundary=")
+		.ok_or(BoundaryExpected)?;
+	let boundary = format!("--{}", boundary);
+	debug!("Boundary: {}", boundary);
+
+	let mut multipart = Multipart::new(body, boundary, MAX_REQUEST_BODY_SIZE);
+
+	let chunks = multipart.read_all_chunks().await.into_handler_error()?;
+
+	let (mut username, mut password) = (None, None);
+
+	for (header, data) in &chunks {
+		debug!("Reading header {header:?}");
+		if header.name == "username" {
+			let username_ = std::str::from_utf8(data).map_err(|_| LoginError::Utf8 {
+				place: "username data",
+			})?;
+			username = Some(username_);
 		}
-		body_vec.extend_from_slice(&data);
+		if header.name == "password" {
+			let password_ = std::str::from_utf8(data).map_err(|_| LoginError::Utf8 {
+				place: "password data",
+			})?;
+			password = Some(password_);
+		}
 	}
-	debug!("Body size: {}", body_vec.len());
 
-	let mut body_lines = body_vec.split(|b| *b == b'\n');
-	let username = body_lines.next().ok_or(LoginError::ExpectedUsername)?;
-	let username = std::str::from_utf8(username).map_err(|_| LoginError::LoginFail)?;
-
-	let password = body_lines.next().ok_or(LoginError::ExpectedPassword)?;
-
-	debug!("Password and username read from body");
+	let username = username.ok_or(LoginError::ExpectedUsername)?;
+	let password = password.ok_or(LoginError::ExpectedPassword)?;
 
 	let account_uuids_guard = db.account_uuids_reader().await;
 	let account_uuid = *account_uuids_guard
@@ -92,7 +136,7 @@ pub async fn login(
 	debug!("Verifying password");
 	Argon2::default()
 		.verify_password(
-			password,
+			password.as_ref(),
 			&PasswordHash::new(&account.password_hash).map_err(|_| LoginError::PasswordHash)?,
 		)
 		.map_err(|_| LoginError::LoginFail)?;
@@ -107,7 +151,7 @@ pub async fn login(
 		.status(StatusCode::CREATED)
 		.header(
 			"Set-Cookie",
-			format!("session={}; Secure; HttpOnly", session_token),
+			format!("session={}; Secure; HttpOnly; SameSite=none", session_token),
 		)
 		.body(Body::empty())?)
 }

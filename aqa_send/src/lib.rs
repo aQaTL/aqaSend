@@ -30,6 +30,7 @@ pub mod error;
 pub mod files;
 pub mod headers;
 pub mod list;
+pub mod multipart;
 pub mod tasks;
 pub mod upload;
 
@@ -183,7 +184,11 @@ where
 			let backtrace = Backtrace::new();
 			error!("{:?}", backtrace);
 
-			Ok(err.response())
+			let mut resp = err.response();
+			if let Some(hv) = origin_header {
+				resp.headers_mut().append("Access-Control-Allow-Origin", hv);
+			}
+			Ok(resp)
 		}
 	}
 }

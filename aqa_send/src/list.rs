@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::db::Db;
 use crate::error::{ErrorContentType, Field, IntoHandlerError};
-use crate::headers::Visibility;
+use crate::headers::{DownloadCount, Visibility};
 
 #[derive(Debug, Error)]
 pub enum ListError {
@@ -122,18 +122,31 @@ pub async fn list(
 				}
 			}
 		})
-		.filter(|(_key, entry): &(_, &FileEntry)| match entry.lifetime {
-			Lifetime::Duration(lifetime) => match entry.upload_date.elapsed() {
-				Ok(elapsed) => elapsed <= lifetime,
-				Err(err) => {
-					error!(
-						"Failed to get elapsed upload time. Diff: {:?}",
-						err.duration()
-					);
-					false
+		.filter(|(_key, entry): &(_, &FileEntry)| {
+			if let Lifetime::Duration(lifetime) = entry.lifetime {
+				match entry.upload_date.elapsed() {
+					Ok(elapsed) => {
+						if elapsed > lifetime {
+							return false;
+						}
+					}
+					Err(err) => {
+						error!(
+							"Failed to get elapsed upload time. Diff: {:?}",
+							err.duration()
+						);
+						return false;
+					}
 				}
-			},
-			Lifetime::Infinite => true,
+			}
+
+			if let DownloadCount::Count(max_count) = entry.download_count_type {
+				if entry.download_count >= max_count {
+					return false;
+				}
+			}
+
+			true
 		})
 		.map(|(key, value)| FileModel {
 			id: key,

@@ -427,10 +427,24 @@ async fn private_file_visible_only_to_logged_in_users() -> Result<()> {
 
 	debug!("Created account with uuid {account_uuid}");
 
+	let boundary = random_string(50);
+
 	let request = Request::builder()
 		.uri("/api/login")
 		.method(Method::POST)
-		.body(Body::from(format!("{username}\n{password}\n")))?;
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"username\"\r\n\r\n\
+{username}\r\n\
+--{boundary}--\r\n\
+Content-Disposition: form-data; name=\"password\"\r\n\r\n\
+{password}\r\n\
+--{boundary}--\r\n"
+		)))?;
 
 	let response = test_server.process_request(request).await?;
 	assert_eq!(response.status(), StatusCode::CREATED);
@@ -536,10 +550,24 @@ async fn private_file_downloadable_only_by_uploader() -> Result<()> {
 
 	debug!("Created account with uuid {account_uuid}");
 
+	let boundary = random_string(50);
+
 	let request = Request::builder()
 		.uri("/api/login")
 		.method(Method::POST)
-		.body(Body::from(format!("{username}\n{password}\n")))?;
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"username\"\r\n\r\n\
+{username}\r\n\
+--{boundary}--\r\n\
+Content-Disposition: form-data; name=\"password\"\r\n\r\n\
+{password}\r\n\
+--{boundary}--\r\n"
+		)))?;
 
 	let response = test_server.process_request(request).await?;
 	assert_eq!(response.status(), StatusCode::CREATED);
@@ -782,10 +810,25 @@ async fn login_works() -> Result<()> {
 	.await?;
 
 	debug!("creating request");
+
+	let boundary = random_string(50);
+
 	let request = Request::builder()
 		.uri("/api/login")
 		.method(Method::POST)
-		.body(Body::from(format!("{username}\n{password}\n")))?;
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"username\"\r\n\r\n\
+{username}\r\n\
+--{boundary}--\r\n\
+Content-Disposition: form-data; name=\"password\"\r\n\r\n\
+{password}\r\n\
+--{boundary}--\r\n"
+		)))?;
 
 	debug!("processing request");
 	let response = test_server.process_request(request).await?;
@@ -799,7 +842,7 @@ async fn login_works() -> Result<()> {
 		.to_str()
 		.unwrap();
 
-	debug!("parsing cookie");
+	debug!("parsing cookie {cookie}");
 	let (_, cookie) = cookie::parse_set_cookie(cookie).unwrap();
 
 	assert!(cookie.http_only);
@@ -826,10 +869,24 @@ async fn registration_code_works() -> Result<()> {
 	.await?;
 
 	debug!("logging in");
+	let boundary = random_string(50);
+
 	let request = Request::builder()
 		.uri("/api/login")
 		.method(Method::POST)
-		.body(Body::from(format!("{username}\n{password}\n")))?;
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"username\"\r\n\r\n\
+{username}\r\n\
+--{boundary}--\r\n\
+Content-Disposition: form-data; name=\"password\"\r\n\r\n\
+{password}\r\n\
+--{boundary}--\r\n"
+		)))?;
 
 	let response = test_server.process_request(request).await?;
 	assert_eq!(response.status(), StatusCode::CREATED);

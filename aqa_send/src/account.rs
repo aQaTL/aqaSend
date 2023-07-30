@@ -151,7 +151,7 @@ pub async fn login(
 		.status(StatusCode::CREATED)
 		.header(
 			"Set-Cookie",
-			format!("session={}; Secure; HttpOnly; SameSite=none", session_token),
+			format!("session={}; Secure; HttpOnly; SameSite=None", session_token),
 		)
 		.body(Body::empty())?)
 }

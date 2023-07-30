@@ -1,5 +1,7 @@
 "use strict";
 
+import { API_SERVER } from "./api.mjs";
+
 /**
  * @typedef ErrorJsonBody
  * @type {object}
@@ -39,7 +41,7 @@ function submitLoginForm(event) {
 	});
 
 	request.responseType = "json";
-	request.open("POST", "http://localhost:8000/api/login");
+	request.open("POST", `${API_SERVER}/api/login`);
 	request.send(formData);
 
 }

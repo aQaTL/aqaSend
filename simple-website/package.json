@@ -4,11 +4,15 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "check": "npx jsdoc index.js"
+    "check_jsdoc": "npx jsdoc index.js",
+    "check": "npx tsc"
   },
   "author": "",
   "license": "MIT",
   "devDependencies": {
     "jsdoc": "^4.0.2"
+  },
+  "dependencies": {
+    "typescript": "^5.1.6"
   }
 }

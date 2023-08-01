@@ -40,13 +40,19 @@ function submitUploadForm(event) {
 
 	const request = new XMLHttpRequest();
 	request.addEventListener("load", (event) => {
-		/** @type [{Types.UploadedFile}] */
-		const response = event.target.response;
+		/** @type {XMLHttpRequest} */
+		const target = event.target;
 
 		if (request.status == 200) {
+			/** @type [{Types.UploadedFile}] */
+			const response = target.response;
+
 			console.log("success: " + JSON.stringify(response));
 			displayInfoMsg(`Successfully uploaded ${response.length} files`, UPLOAD_RESULT_SUCCESS);
 		} else {
+			/** @type {Types.ErrorJsonBody} */
+			const response = target.response;
+
 			console.error("error: " + JSON.stringify(response));
 			displayInfoMsg(`Upload failed: ${response.message}`, UPLOAD_RESULT_FAILURE);
 		}

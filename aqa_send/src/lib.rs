@@ -60,10 +60,10 @@ impl Deref for AuthorizedUsers {
 }
 
 impl AqaService {
-	pub fn new(db: Db) -> Self {
+	pub fn new(db: Db, authorized_users: AuthorizedUsers) -> Self {
 		AqaService {
 			db,
-			authorized_users: AuthorizedUsers::default(),
+			authorized_users,
 		}
 	}
 }

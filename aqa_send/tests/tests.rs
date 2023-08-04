@@ -17,7 +17,7 @@ use aqa_send::db_stuff::AccountType;
 use aqa_send::files::DB_DIR;
 use aqa_send::headers::Lifetime;
 use aqa_send::upload::UploadResponse;
-use aqa_send::{cookie, db, headers, list, tasks, AqaService, AqaServiceError};
+use aqa_send::{cookie, db, headers, list, tasks, AqaService, AqaServiceError, AuthorizedUsers};
 
 struct TestServer {
 	#[allow(dead_code)]
@@ -39,7 +39,7 @@ impl TestServer {
 		// init_app_directory_structure(db_dir.path())?;
 
 		let db_handle = db::init(db_dir.path())?;
-		let aqa_service = AqaService::new(db_handle.clone());
+		let aqa_service = AqaService::new(db_handle.clone(), AuthorizedUsers::default());
 
 		Ok(Self {
 			db_dir,

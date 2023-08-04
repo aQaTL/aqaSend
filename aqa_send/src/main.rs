@@ -13,8 +13,8 @@ use tokio::runtime::Runtime;
 use aqa_send::cli_commands::create_account::create_account_cmd;
 use aqa_send::db::{self, DbError};
 use aqa_send::db_stuff::AccountType;
-use aqa_send::tasks;
 use aqa_send::tasks::cleanup::{DEFAULT_CLEANUP_INTERVAL, DEFAULT_START_LAG};
+use aqa_send::{tasks, AuthorizedUsers};
 use aqa_send::{AqaService, AqaServiceError};
 
 const USAGE: &str = r#"aqaSend
@@ -158,13 +158,16 @@ fn run() -> Result<(), Box<dyn Error>> {
 	));
 
 	drop(guard);
+	let authorized_users = AuthorizedUsers::default();
 
 	tokio_runtime
 		.block_on(join_all(servers.into_iter().map(|server| {
 			server.serve(make_service_fn(|_addr_stream| {
 				let db = db_handle.clone();
+				let authorized_users = authorized_users.clone();
 				ready(Result::<AqaService, AqaServiceError>::Ok(AqaService::new(
 					db,
+					authorized_users,
 				)))
 			}))
 		})))

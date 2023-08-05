@@ -6,8 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-aqa_logger = { path = "../aqa_logger" }
-
 hyper = { version = "0.14.16", features = ["server", "http1", "http2", "tcp", "stream"] }
 tokio = { version = "1.15.0", features = ["rt-multi-thread", "net", "macros", "fs", "tracing"] }
 futures = "0.3.19"
@@ -29,6 +27,10 @@ zeroize = "1.5.7"
 argon2 = "0.4.1"
 dashmap = "5.4.0"
 nom = "7.1.1"
+
+[dependencies.aqa_logger]
+git = "https://github.com/aQaTL/aqa_logger"
+rev = "9a97c65975c503dfd67ca34fba30f329b577f466"
 
 [target.'cfg(target_os = "linux")'.dependencies.systemd-socket-activation]
 features = ["dlopen"]

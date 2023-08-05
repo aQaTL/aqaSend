@@ -31,7 +31,7 @@ impl TestServer {
 	fn new() -> Result<Self> {
 		let db_dir = tempfile::tempdir()?;
 
-		let _ = aqa_logger::try_init();
+		aqa_logger::init();
 		// if let Err(err) = tracing_subscriber::FmtSubscriber::builder().try_init() {
 		// 	eprintln!("{err:?}");
 		// }

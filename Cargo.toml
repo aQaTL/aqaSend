@@ -1,4 +1,4 @@
 [workspace]
 default-members = ["aqa_send"]
-members = ["aqa_send", "aqa_send_web_server", "aqa_logger"]
+members = ["aqa_send"]
 exclude = ["upload-utils"]

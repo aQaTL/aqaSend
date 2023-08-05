@@ -34,7 +34,8 @@ checksum = "98161a4e3e2184da77bb14f02184cdd111e83bbbcc9979dfee3c44b9a85f5602"
 
 [[package]]
 name = "aqa_logger"
-version = "0.1.0"
+version = "0.1.1"
+source = "git+https://github.com/aQaTL/aqa_logger?rev=9a97c65975c503dfd67ca34fba30f329b577f466#9a97c65975c503dfd67ca34fba30f329b577f466"
 dependencies = [
  "log",
 ]
@@ -69,20 +70,6 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "zeroize",
-]
-
-[[package]]
-name = "aqa_send_web_server"
-version = "0.1.0"
-dependencies = [
- "aqa_logger",
- "dir_embedder",
- "futures",
- "hyper",
- "lazy_static",
- "log",
- "systemd-socket-activation",
- "tokio",
 ]
 
 [[package]]
@@ -373,16 +360,6 @@ dependencies = [
  "block-buffer",
  "crypto-common",
  "subtle",
-]
-
-[[package]]
-name = "dir_embedder"
-version = "0.1.0"
-source = "git+https://github.com/aQaTL/dir_embedder.git?branch=main#ce5dcbc3d782f28f486efe652d7e5996af590fcd"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]

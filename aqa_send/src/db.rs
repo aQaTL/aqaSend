@@ -1,4 +1,4 @@
-use log::info;
+use log::{debug, info};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fs::File;
@@ -34,16 +34,34 @@ pub fn init(working_dir: &Path) -> Result<Db, DbError> {
 		registration_codes_path: registration_codes_path.clone(),
 	}));
 
+	debug!("Reading {DB_FILE} file");
 	let db: HashMap<Uuid, FileEntry> = match File::open(&db_file_path) {
-		Ok(mut file) => serde_json::from_reader(&mut file)?,
+		Ok(mut file) => serde_json::from_reader(&mut file).map_err(|err| DbError::Io {
+			error: err.into(),
+			file: DB_FILE,
+		})?,
 		Err(err) if err.kind() == ErrorKind::NotFound => Default::default(),
-		Err(err) => return Err(DbError::DbFileOperation(err)),
+		Err(err) => {
+			return Err(DbError::Io {
+				error: DbIoError::DbFileOperation(err),
+				file: DB_FILE,
+			})
+		}
 	};
 
+	debug!("Reading {ACCOUNTS_FILE} file");
 	let accounts: HashMap<Uuid, Account> = match File::open(&accounts_path) {
-		Ok(mut file) => serde_json::from_reader(&mut file)?,
+		Ok(mut file) => serde_json::from_reader(&mut file).map_err(|err| DbError::Io {
+			error: err.into(),
+			file: ACCOUNTS_FILE,
+		})?,
 		Err(err) if err.kind() == ErrorKind::NotFound => Default::default(),
-		Err(err) => return Err(DbError::DbFileOperation(err)),
+		Err(err) => {
+			return Err(DbError::Io {
+				error: DbIoError::DbFileOperation(err),
+				file: ACCOUNTS_FILE,
+			})
+		}
 	};
 
 	let mut account_uuids = HashMap::<String, Uuid>::with_capacity(accounts.len());
@@ -51,10 +69,19 @@ pub fn init(working_dir: &Path) -> Result<Db, DbError> {
 		account_uuids.insert(account.username.clone(), account.uuid);
 	}
 
+	debug!("Reading {REGISTRATION_CODES_PATH} file");
 	let registration_codes: Vec<String> = match File::open(&registration_codes_path) {
-		Ok(mut file) => serde_json::from_reader(&mut file)?,
+		Ok(mut file) => serde_json::from_reader(&mut file).map_err(|err| DbError::Io {
+			error: err.into(),
+			file: REGISTRATION_CODES_PATH,
+		})?,
 		Err(err) if err.kind() == ErrorKind::NotFound => Default::default(),
-		Err(err) => return Err(DbError::DbFileOperation(err)),
+		Err(err) => {
+			return Err(DbError::Io {
+				error: DbIoError::DbFileOperation(err),
+				file: REGISTRATION_CODES_PATH,
+			})
+		}
 	};
 
 	Ok(Db {
@@ -71,11 +98,12 @@ pub enum DbError {
 	#[error(transparent)]
 	DirectoryInit(#[from] InitAppFolderStructureError),
 
-	#[error(transparent)]
-	DbFileOperation(#[from] io::Error),
+	#[error("Io error for \"{file}\": {error}")]
+	Io {
+		error: DbIoError,
 
-	#[error(transparent)]
-	DbFileDeserialization(#[from] serde_json::Error),
+		file: &'static str,
+	},
 
 	#[error("Db didn't contain requested item")]
 	UpdateFail,
@@ -85,6 +113,15 @@ pub enum DbError {
 
 	#[error("Tried to add account with username that already exists")]
 	AccountAlreadyExists,
+}
+
+#[derive(Debug, Error)]
+pub enum DbIoError {
+	#[error(transparent)]
+	DbFileOperation(#[from] io::Error),
+
+	#[error(transparent)]
+	DbFileDeserialization(#[from] serde_json::Error),
 }
 
 pub type DbDataHM = HashMap<Uuid, FileEntry>;
@@ -192,14 +229,35 @@ impl Db {
 		let config: &'static DbConfig = self.config;
 
 		tokio::task::spawn_blocking(move || {
-			let mut file = File::create(&config.db_file_path)?;
-			serde_json::to_writer(&mut file, &data_hm)?;
+			let mut file = File::create(&config.db_file_path).map_err(|err| DbError::Io {
+				error: err.into(),
+				file: DB_FILE,
+			})?;
+			serde_json::to_writer(&mut file, &data_hm).map_err(|err| DbError::Io {
+				error: err.into(),
+				file: DB_FILE,
+			})?;
 
-			let mut file = File::create(&config.accounts_path)?;
-			serde_json::to_writer(&mut file, &accounts_hm)?;
+			let mut file = File::create(&config.accounts_path).map_err(|err| DbError::Io {
+				error: err.into(),
+				file: ACCOUNTS_FILE,
+			})?;
+			serde_json::to_writer(&mut file, &accounts_hm).map_err(|err| DbError::Io {
+				error: err.into(),
+				file: ACCOUNTS_FILE,
+			})?;
 
-			let mut file = File::create(&config.registration_codes_path)?;
-			serde_json::to_writer(&mut file, &registration_codes_vec)?;
+			let mut file =
+				File::create(&config.registration_codes_path).map_err(|err| DbError::Io {
+					error: err.into(),
+					file: REGISTRATION_CODES_PATH,
+				})?;
+			serde_json::to_writer(&mut file, &registration_codes_vec).map_err(|err| {
+				DbError::Io {
+					error: err.into(),
+					file: REGISTRATION_CODES_PATH,
+				}
+			})?;
 
 			Result::<(), DbError>::Ok(())
 		})

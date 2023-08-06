@@ -39,28 +39,25 @@ function submitUploadForm(event) {
 	}
 
 	const request = new XMLHttpRequest();
-	request.addEventListener("load", (event) => {
-		/** @type {XMLHttpRequest} */
-		const target = event.target;
-
-		if (request.status == 200) {
-			/** @type [{Types.UploadedFile}] */
-			const response = target.response;
+	request.addEventListener("load", (_event) => {
+		if (request.status === 200) {
+			/** @type {[Types.UploadedFile]} */
+			const response = request.response;
 
 			console.log("success: " + JSON.stringify(response));
 			displayInfoMsg(`Successfully uploaded ${response.length} files`, UPLOAD_RESULT_SUCCESS);
 		} else {
 			/** @type {Types.ErrorJsonBody} */
-			const response = target.response;
+			const response = request.response;
 
 			console.error("error: " + JSON.stringify(response));
 			displayInfoMsg(`Upload failed: ${response.message}`, UPLOAD_RESULT_FAILURE);
 		}
 	});
 
-	request.addEventListener("error", (event) => {
+	request.addEventListener("error", (_event) => {
 		/** @type {Types.ErrorJsonBody} */
-		const response = event.target.response;
+		const response = request.response;
 
 		console.error("error: " + JSON.stringify(response));
 		displayInfoMsg(`Upload failed: ${response.message}`, UPLOAD_RESULT_FAILURE);
@@ -72,8 +69,8 @@ function submitUploadForm(event) {
 	request.setRequestHeader("aqa-download-count", downloadCount);
 	request.setRequestHeader("aqa-lifetime", lifetime);
 	request.setRequestHeader("aqa-visibility", visibility);
-	if (password.trim().length != 0)  {
-		request.setRequestHeader("aqa-password", password);
+	if (password.trim().length !== 0)  {
+		request.setRequestHeader("aqa-password", encodeURIComponent(password));
 	}
 	hideInfoMsg();
 	request.send(formData);

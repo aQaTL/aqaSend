@@ -30,13 +30,13 @@ function submitLoginForm(event) {
 
 	console.log("Clicked to submit!");
 
-	const loginFormEl = event.target;
+	const loginFormEl = /** @type {HTMLFormElement} */ (document.getElementById("loginForm"));
 	const formData = new FormData(loginFormEl);
 
 	const request = new XMLHttpRequest();
-	request.addEventListener("load", (event) => {
+	request.addEventListener("load", (_event) => {
 		/** @type {ErrorJsonBody} */
-		const response = event.target.response;
+		const response = request.response;
 		console.log("success: " + JSON.stringify(response));
 	});
 

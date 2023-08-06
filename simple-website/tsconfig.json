@@ -2,6 +2,7 @@
 	"include": ["./**/*"],
 	"exclude": ["./out"],
 	"compilerOptions": {
+		"lib": ["es2021", "dom"],
 		"allowJs": true,
 		"checkJs": true,
 		"noEmit": true

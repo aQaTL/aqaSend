@@ -73,6 +73,7 @@ pub struct FileModel<'a> {
 	pub download_count: u64,
 
 	pub visibility: Visibility,
+	pub has_password: bool,
 
 	pub lifetime: Lifetime,
 	pub upload_date: SystemTime,
@@ -159,6 +160,7 @@ pub async fn list(
 				uploader_uuid,
 				download_count,
 				visibility,
+				password,
 				lifetime,
 				upload_date,
 				..
@@ -171,6 +173,7 @@ pub async fn list(
 				uploader_uuid: *uploader_uuid,
 				download_count: *download_count,
 				visibility: *visibility,
+				has_password: password.is_some(),
 				lifetime: *lifetime,
 				upload_date: *upload_date,
 			}

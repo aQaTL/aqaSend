@@ -8,27 +8,26 @@
 /**
  * @typedef UploadedFile
  * @type {object}
- * @property {string} uuid - ''
- * @property {string} filename - ''
+ * @property {string} uuid -
+ * @property {string} filename -
 */
 
 /**
  * @typedef FileModel
  * @type {object}
- * @property {string} uuid - file uuid
+ * @property {!string} uuid - file uuid
 
- * @property {string} filename - 
- * @property {string} content_type -
- * @property {string} uploader_uuid -
+ * @property {!string} filename -
+ * @property {!string} content_type -
+ * @property {!string} uploader_uuid -
  * 
- * @property {DownloadCount} download_count_type - 
- * @property {number} download_count - 
+ * @property {!number} download_count -
  *
- * @property {Visibility} visibility - 
- * @property {string} password - 
+ * @property {!('Public'|'Private')} visibility -
+ * @property {!boolean} has_password -
  *
- * @property {Lifetime} lifetime - 
- * @property {Date} upload_date - 
+ * @property {?Duration} lifetime -
+ * @property {!Date} upload_date -
 */
 
 /**
@@ -36,6 +35,13 @@
 * @property {number} secs_since_epoch -
 * @property {number} nanos_since_epoch - 
 */
+
+/**
+ * @typedef Duration
+ * @type {object}
+ * @property {number} secs -
+ * @property {number} nanos -
+ */
 
 
 export const Types = {};

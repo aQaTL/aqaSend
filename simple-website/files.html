@@ -18,8 +18,24 @@
 		<a class="menuLink" href="/log_in.html">Log in</a>
 	</nav>
 	
-	<main id="fileEntries">
+	<main>
+		<div id="fileEntries"></div>
 	</main>
+
+	<dialog id="passwordInput">
+		<form>
+			<p>
+				<label>
+					Password:
+					<input type="password" placeholder="password" />
+				</label>
+			</p>
+			<div>
+				<button type="submit" id="confirmBtn" value="confirm" formmethod="dialog">Download</button>
+				<button type="submit" value="cancel" formmethod="dialog">Cancel</button>
+			</div>
+		</form>
+	</dialog>
 
 	<script type="module" src="/files.js"></script>
 </body>

@@ -358,7 +358,7 @@ async fn file_protected_by_password() -> Result<()> {
 			format!("multipart/form-data; boundary={boundary}"),
 		)
 		.header(headers::DOWNLOAD_COUNT, DOWNLOAD_COUNT)
-		.header(headers::PASSWORD, PASSWORD)
+		.header(headers::PASSWORD, urlencoding::encode(PASSWORD).as_ref())
 		.body(Body::from(format!(
 			"--{boundary}\r\n\
 Content-Disposition: form-data; name=\"sample_file\"; filename=\"sample_file\"\r\n\
@@ -396,7 +396,11 @@ Content-Type: text/plain\r\n\r\n\
 	assert_ne!(response.status(), StatusCode::OK);
 
 	let request = Request::builder()
-		.uri(format!("/api/download/{}", uploaded_files[0].uuid))
+		.uri(format!(
+			"/api/download/{}?password={}",
+			uploaded_files[0].uuid,
+			urlencoding::encode(PASSWORD)
+		))
 		.method(Method::GET)
 		.header(headers::PASSWORD, PASSWORD)
 		.body(Body::empty())?;

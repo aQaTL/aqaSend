@@ -8,6 +8,30 @@ function hello() {
 	greetingEl.innerHTML = "All files";
 }
 
+async function loadUser() {
+	console.log("Loading user");
+
+	const request = new XMLHttpRequest();
+	request.addEventListener("load", (_event) => {
+		/** @type {string} */
+		const username = request.response;
+		if (request.status === 200) {
+			console.log(`current user: ${username}`);
+			document.getElementById("userInfo").innerText = username;
+		} else {
+			console.log(`No user logged in`);
+		}
+
+	});
+	request.addEventListener("error", (_event) => {
+		console.log(`No user logged in`);
+	});
+
+	request.responseType = "text";
+	request.open("GET", `${API_SERVER}/api/whoami`, true);
+	request.send();
+}
+
 window.addEventListener("DOMContentLoaded", function (_event) {
 	hello();
 	loadUser();
@@ -121,28 +145,6 @@ function formatDuration(ms) {
 		.filter(val => val[1] !== 0)
 		.map(([key, val]) => `${val} ${key}${val !== 1 ? "s" : ""}`)
 		.join(", ");
-}
-
-async function loadUser() {
-	console.log("Loading user");
-
-	const request = new XMLHttpRequest();
-	request.addEventListener("load", (_event) => {
-		/** @type {string} */
-		const username = request.response;
-		if (request.status === 200) {
-			console.log(`current user: ${username}`);
-		} else {
-			console.log(`No user logged in`);
-		}
-
-	});
-	request.addEventListener("error", (_event) => {
-		console.log(`No user logged in`);
-	});
-
-	request.open("GET", `${API_SERVER}/api/whoami`, true);
-	request.send();
 }
 
 /** @type {HTMLElement} */

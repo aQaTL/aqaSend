@@ -10,24 +10,23 @@ function hello() {
 
 window.addEventListener("DOMContentLoaded", function (_event) {
 	hello();
+	loadUser();
 	loadFiles();
 	setupPasswordInputDialog();
 });
 
-function loadFiles() {
+async function loadFiles() {
 	console.log("Loading files");
 
 	const request = new XMLHttpRequest();
 	request.addEventListener("load", (_event) => {
 		/** @type {[Types.FileModel]} */
 		const response = request.response;
-		console.log("success: " + JSON.stringify(response));
-
 		displayFiles(response);
 	});
 
 	request.responseType = "json";
-	request.open("GET", `${API_SERVER}/api/list.json`);
+	request.open("GET", `${API_SERVER}/api/list.json`, true);
 	request.send();
 }
 
@@ -122,6 +121,28 @@ function formatDuration(ms) {
 		.filter(val => val[1] !== 0)
 		.map(([key, val]) => `${val} ${key}${val !== 1 ? "s" : ""}`)
 		.join(", ");
+}
+
+async function loadUser() {
+	console.log("Loading user");
+
+	const request = new XMLHttpRequest();
+	request.addEventListener("load", (_event) => {
+		/** @type {string} */
+		const username = request.response;
+		if (request.status === 200) {
+			console.log(`current user: ${username}`);
+		} else {
+			console.log(`No user logged in`);
+		}
+
+	});
+	request.addEventListener("error", (_event) => {
+		console.log(`No user logged in`);
+	});
+
+	request.open("GET", `${API_SERVER}/api/whoami`, true);
+	request.send();
 }
 
 /** @type {HTMLElement} */

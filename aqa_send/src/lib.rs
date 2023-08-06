@@ -17,6 +17,7 @@ use uuid::Uuid;
 
 use crate::db::{Db, DbError};
 use crate::db_stuff::{Account, AccountType, FileEntry};
+use crate::error::ErrorContentType;
 use crate::files::DB_DIR;
 use crate::headers::{DownloadCount, Lifetime, DOWNLOAD_COUNT, LIFETIME, PASSWORD, VISIBILITY};
 
@@ -221,16 +222,31 @@ async fn hello(_req: Request<Body>) -> Result<Response<Body>, AqaServiceError> {
 #[derive(Debug, Error)]
 enum WhoamiError {
 	#[error(transparent)]
-	Http(#[from] hyper::http::Error),
-
-	#[error(transparent)]
 	Auth(#[from] AuthError),
 
 	#[error("Not logged in")]
 	NotLoggedIn,
 }
 
-impl HttpHandlerError for WhoamiError {}
+impl HttpHandlerError for WhoamiError {
+	fn code(&self) -> StatusCode {
+		match self {
+			Self::Auth(err) => err.code(),
+			Self::NotLoggedIn => StatusCode::UNAUTHORIZED,
+		}
+	}
+
+	fn user_presentable(&self) -> bool {
+		match self {
+			Self::Auth(err) => err.user_presentable(),
+			Self::NotLoggedIn => true,
+		}
+	}
+
+	fn content_type() -> ErrorContentType {
+		ErrorContentType::PlainText
+	}
+}
 
 async fn whoami(
 	req: Request<Body>,

@@ -2,8 +2,8 @@
 
 import * as Types from "./models.mjs"
 import {API_SERVER} from "./api_endpoint.mjs";
-import * as PasswordInputDialog from "./password_input_dialog.mjs"
-import * as Api from "./api.mjs";
+import * as PasswordInputDialog from "./password_input_dialog.mjs";
+import * as Api from "./api.mjs"
 
 function hello() {
 	let greetingEl = document.getElementById("greeting");
@@ -23,12 +23,12 @@ async function loadUser() {
 window.addEventListener("DOMContentLoaded", function (_event) {
 	hello();
 	loadUser();
-	loadFiles();
+	loadMyFiles();
 	PasswordInputDialog.setup();
 });
 
-async function loadFiles() {
-	let files = await Api.loadFiles();
+async function loadMyFiles() {
+	let files = await Api.loadFiles(true);
 	displayFiles(files);
 }
 
@@ -124,3 +124,4 @@ function formatDuration(ms) {
 		.map(([key, val]) => `${val} ${key}${val !== 1 ? "s" : ""}`)
 		.join(", ");
 }
+

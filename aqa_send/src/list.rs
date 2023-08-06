@@ -1,5 +1,5 @@
 use crate::cookie::parse_cookie;
-use crate::{AuthorizedUsers, FileEntry, HandlerError, HttpHandlerError, Lifetime};
+use crate::{uri_query_iter, AuthorizedUsers, FileEntry, HandlerError, HttpHandlerError, Lifetime};
 use hyper::{Body, Request, Response, StatusCode};
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -111,6 +111,16 @@ pub async fn list(
 		None => None,
 	};
 
+	let mut only_self_uploads = false;
+	if uploader.is_some() {
+		only_self_uploads = req
+			.uri()
+			.query()
+			.and_then(|query| uri_query_iter(query).find(|(key, _value)| *key == "uploader"))
+			.map(|(_, uploader)| uploader == "me")
+			.unwrap_or_default();
+	}
+
 	let db_reader = db.reader().await;
 	let list: Vec<FileModel> = db_reader
 		.iter()
@@ -125,6 +135,18 @@ pub async fn list(
 			}
 		})
 		.filter(|(_key, entry): &(_, &FileEntry)| {
+			if only_self_uploads {
+				let Some(me) = &uploader else {
+					return false;
+				};
+				let Some(uploader_uuid) = entry.uploader_uuid else {
+					return false;
+				};
+				if me.uuid != uploader_uuid {
+					return false;
+				}
+			}
+
 			if let Lifetime::Duration(lifetime) = entry.lifetime {
 				match entry.upload_date.elapsed() {
 					Ok(elapsed) => {

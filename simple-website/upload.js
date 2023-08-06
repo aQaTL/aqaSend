@@ -1,7 +1,7 @@
 "use strict";
 
 import * as Types from  "./models.mjs";
-import { API_SERVER } from "./api.mjs";
+import { API_SERVER } from "./api_endpoint.mjs";
 
 function main() {
 	let uploadFormEl = document.getElementById("uploadForm");

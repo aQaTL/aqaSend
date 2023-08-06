@@ -1,6 +1,6 @@
 "use strict";
 
-import { API_SERVER } from "./api.mjs";
+import { API_SERVER } from "./api_endpoint.mjs";
 
 /**
  * @typedef ErrorJsonBody

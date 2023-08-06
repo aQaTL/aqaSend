@@ -15,7 +15,7 @@ use crate::db::{self, Db};
 use crate::db_stuff::FileEntry;
 use crate::error::{ErrorContentType, IntoHandlerError};
 use crate::headers::{DownloadCount, Password, Visibility};
-use crate::{AuthorizedUsers, HandlerError, HttpHandlerError, StatusCode};
+use crate::{uri_query_iter, AuthorizedUsers, HandlerError, HttpHandlerError, StatusCode};
 
 #[derive(Debug, Error)]
 pub enum DownloadError {
@@ -100,12 +100,7 @@ pub async fn download(
 
 	if let Some(Password(ref password)) = file_entry.password {
 		let query = req.uri().query().ok_or(DownloadError::InvalidPassword)?;
-		let (_, provided_password) = query
-			.split('&')
-			.filter_map(|kv| {
-				let mut split = kv.split('=');
-				Some((split.next()?, split.next()?))
-			})
+		let (_, provided_password) = uri_query_iter(query)
 			.find(|(key, _value)| *key == "password")
 			.ok_or(DownloadError::InvalidPassword)?;
 

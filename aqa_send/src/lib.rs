@@ -5,7 +5,6 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use account::{get_logged_in_user, AuthError};
-use backtrace::Backtrace;
 use dashmap::DashMap;
 use error::{HandlerError, HttpHandlerError};
 use hyper::http::HeaderValue;
@@ -176,16 +175,15 @@ where
 			if let Some(hv) = origin_header {
 				resp.headers_mut().append("Access-Control-Allow-Origin", hv);
 			}
-			debug!("{:?}", resp);
+			debug!("Response {}", resp.status());
 			Ok(resp)
 		}
 		Err(err) => {
-			error!("{:?}", err);
-
-			let backtrace = Backtrace::new();
-			error!("{:?}", backtrace);
+			// let backtrace = Backtrace::new();
+			// error!("{:?}", backtrace);
 
 			let mut resp = err.response();
+			error!("{}; {err:?}", resp.status());
 			if let Some(hv) = origin_header {
 				resp.headers_mut().append("Access-Control-Allow-Origin", hv);
 			}
@@ -267,6 +265,13 @@ async fn whoami(
 
 pub fn split_uri_path(path: &str) -> impl Iterator<Item = &str> {
 	path.split('/').filter(|segment| !segment.is_empty())
+}
+
+pub fn uri_query_iter(query: &str) -> impl Iterator<Item = (&str, &str)> {
+	query.split('&').filter_map(|kv| {
+		let mut split = kv.split('=');
+		Some((split.next()?, split.next()?))
+	})
 }
 
 #[cfg(test)]

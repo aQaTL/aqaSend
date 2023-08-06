@@ -21,9 +21,24 @@
 	</nav>
 
 	<main>
-
+		<div id="fileEntries"></div>
 	</main>
 
-	<script type="module" src="/index.js"></script>
+	<dialog id="passwordInput">
+		<form>
+			<p>
+				<label>
+					Password:
+					<input type="password" placeholder="password" />
+				</label>
+			</p>
+			<div>
+				<button type="submit" id="confirmBtn" value="confirm" formmethod="dialog">Download</button>
+				<button type="submit" value="cancel" formmethod="dialog">Cancel</button>
+			</div>
+		</form>
+	</dialog>
+
+	<script type="module" src="/my_files.js"></script>
 </body>
 </html>

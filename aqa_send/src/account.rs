@@ -1,12 +1,10 @@
 use crate::cookie::parse_cookie;
 use crate::db_stuff::AccountType;
 use crate::error::{ErrorContentType, Field, IntoHandlerError};
-use crate::multipart::{Multipart, MultipartError};
+use crate::multipart::{self, Multipart, MultipartError};
 use crate::{cli_commands, Account, AuthorizedUsers, Db, HandlerError, HttpHandlerError};
 
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
-use bytes::BytesMut;
-use futures::StreamExt;
 use hyper::http::HeaderValue;
 use hyper::{Body, HeaderMap, Request, Response, StatusCode};
 use log::debug;
@@ -21,11 +19,8 @@ pub enum LoginError {
 	#[error("Invalid username or password")]
 	LoginFail,
 
-	#[error("Upload requires `multipart/form-data` Content-Type")]
-	InvalidContentType,
-
-	#[error("Multipart/form-data upload must define a boundary")]
-	BoundaryExpected,
+	#[error(transparent)]
+	Boundary(#[from] multipart::GetBoundaryError),
 
 	#[error(transparent)]
 	Multipart(#[from] MultipartError),
@@ -49,21 +44,23 @@ pub enum LoginError {
 impl HttpHandlerError for LoginError {
 	fn code(&self) -> StatusCode {
 		match self {
-			LoginError::LoginFail => StatusCode::UNAUTHORIZED,
+			Self::LoginFail => StatusCode::UNAUTHORIZED,
 
-			LoginError::Multipart(_) => StatusCode::BAD_REQUEST,
-			LoginError::InvalidContentType => StatusCode::BAD_REQUEST,
-			LoginError::BoundaryExpected => StatusCode::BAD_REQUEST,
-			LoginError::ExpectedUsername => StatusCode::BAD_REQUEST,
-			LoginError::ExpectedPassword => StatusCode::BAD_REQUEST,
-			LoginError::BodyTooBig => StatusCode::BAD_REQUEST,
-			LoginError::PasswordHash => StatusCode::BAD_REQUEST,
-			LoginError::Utf8 { .. } => StatusCode::BAD_REQUEST,
+			Self::Multipart(_) => StatusCode::BAD_REQUEST,
+			Self::Boundary(err) => err.code(),
+			Self::ExpectedUsername => StatusCode::BAD_REQUEST,
+			Self::ExpectedPassword => StatusCode::BAD_REQUEST,
+			Self::BodyTooBig => StatusCode::BAD_REQUEST,
+			Self::PasswordHash => StatusCode::BAD_REQUEST,
+			Self::Utf8 { .. } => StatusCode::BAD_REQUEST,
 		}
 	}
 
 	fn user_presentable(&self) -> bool {
-		true
+		match self {
+			Self::Boundary(err) => err.user_presentable(),
+			_ => true,
+		}
 	}
 
 	fn content_type() -> ErrorContentType {
@@ -78,23 +75,9 @@ pub async fn login(
 	db: Db,
 	authorized_users: AuthorizedUsers,
 ) -> Result<Response<Body>, HandlerError<LoginError>> {
-	use LoginError::{BoundaryExpected, InvalidContentType};
-
 	let (parts, body): (_, Body) = req.into_parts();
 
-	let content_type = parts
-		.headers
-		.get("content-type")
-		.ok_or(InvalidContentType)?
-		.to_str()
-		.map_err(|_| InvalidContentType)?;
-
-	let boundary = content_type
-		.strip_prefix("multipart/form-data; ")
-		.ok_or(BoundaryExpected)?
-		.strip_prefix("boundary=")
-		.ok_or(BoundaryExpected)?;
-	let boundary = format!("--{}", boundary);
+	let boundary = multipart::get_boundary_from_req(parts).map_err(LoginError::from)?;
 	debug!("Boundary: {}", boundary);
 
 	let mut multipart = Multipart::new(body, boundary, MAX_REQUEST_BODY_SIZE);
@@ -316,11 +299,23 @@ pub async fn create_registration_code(
 
 #[derive(Debug, Error)]
 pub enum CreateAccountFromRegistrationCodeError {
+	#[error(transparent)]
+	Boundary(#[from] multipart::GetBoundaryError),
+
+	#[error(transparent)]
+	Multipart(#[from] MultipartError),
+
 	#[error("Invalid registration code")]
 	InvalidRegistrationCode,
 
 	#[error("Request to big")]
 	RequestTooBig,
+
+	#[error("Bad request")]
+	BadRequest,
+
+	#[error("Expected a valid utf-8 sequence in: {place}")]
+	Utf8 { place: &'static str },
 
 	#[error(transparent)]
 	CreateAccount(#[from] cli_commands::create_account::CreateAccountError),
@@ -329,30 +324,27 @@ pub enum CreateAccountFromRegistrationCodeError {
 impl HttpHandlerError for CreateAccountFromRegistrationCodeError {
 	fn code(&self) -> StatusCode {
 		match self {
-			CreateAccountFromRegistrationCodeError::InvalidRegistrationCode => StatusCode::OK,
-			CreateAccountFromRegistrationCodeError::RequestTooBig => StatusCode::PAYLOAD_TOO_LARGE,
-			CreateAccountFromRegistrationCodeError::CreateAccount(err) => err.code(),
+			Self::Boundary(err) => err.code(),
+			Self::Multipart(_) => StatusCode::BAD_REQUEST,
+			Self::InvalidRegistrationCode => StatusCode::OK,
+			Self::RequestTooBig => StatusCode::PAYLOAD_TOO_LARGE,
+			Self::BadRequest => StatusCode::BAD_REQUEST,
+			Self::CreateAccount(err) => err.code(),
+			Self::Utf8 { .. } => StatusCode::BAD_REQUEST,
 		}
 	}
 
 	fn user_presentable(&self) -> bool {
 		match self {
-			CreateAccountFromRegistrationCodeError::InvalidRegistrationCode => true,
-			CreateAccountFromRegistrationCodeError::RequestTooBig => true,
-			CreateAccountFromRegistrationCodeError::CreateAccount(err) => err.user_presentable(),
+			Self::Boundary(err) => err.user_presentable(),
+			Self::CreateAccount(err) => err.user_presentable(),
+			_ => true,
 		}
 	}
 
 	fn content_type() -> ErrorContentType {
 		ErrorContentType::Json
 	}
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CreateAccountModel {
-	pub registration_code: String,
-	pub username: String,
-	pub password: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -365,30 +357,65 @@ pub async fn create_account_from_registration_code(
 	db: Db,
 	authorized_users: AuthorizedUsers,
 ) -> Result<Response<Body>, HandlerError<CreateAccountFromRegistrationCodeError>> {
-	let (_parts, mut body) = req.into_parts();
+	let (parts, body) = req.into_parts();
 
-	debug!("Reading body");
-	let mut req_body = BytesMut::with_capacity(MAX_REQUEST_BODY_SIZE);
-	while let Some(chunk) = body.next().await {
-		let chunk = chunk?;
-		if req_body.len() + chunk.len() > MAX_REQUEST_BODY_SIZE {
-			return Err(CreateAccountFromRegistrationCodeError::RequestTooBig.into());
+	let boundary = multipart::get_boundary_from_req(parts)
+		.map_err(CreateAccountFromRegistrationCodeError::from)?;
+	debug!("Boundary: {}", boundary);
+
+	let mut multipart = Multipart::new(body, boundary, MAX_REQUEST_BODY_SIZE);
+	let chunks = multipart.read_all_chunks().await.into_handler_error()?;
+
+	let (mut registration_code, mut username, mut password) = (None, None, None);
+
+	for (header, data) in &chunks {
+		debug!("Reading header {header:?}");
+
+		match header.name.as_str() {
+			"username" => {
+				let v = std::str::from_utf8(data).map_err(|_| {
+					CreateAccountFromRegistrationCodeError::Utf8 {
+						place: "username data",
+					}
+				})?;
+				username = Some(v);
+			}
+			"password" => {
+				let v = std::str::from_utf8(data).map_err(|_| {
+					CreateAccountFromRegistrationCodeError::Utf8 {
+						place: "password data",
+					}
+				})?;
+				password = Some(v);
+			}
+			"registration_code" => {
+				let v = std::str::from_utf8(data).map_err(|_| {
+					CreateAccountFromRegistrationCodeError::Utf8 {
+						place: "registration_code data",
+					}
+				})?;
+				registration_code = Some(v);
+			}
+			_ => (),
 		}
-		req_body.extend_from_slice(&chunk);
 	}
 
+	let registration_code =
+		registration_code.ok_or(CreateAccountFromRegistrationCodeError::BadRequest)?;
+	let username = username.ok_or(CreateAccountFromRegistrationCodeError::BadRequest)?;
+	let password = password.ok_or(CreateAccountFromRegistrationCodeError::BadRequest)?;
+
 	debug!("Validating registration code");
-	let create_account: CreateAccountModel = serde_json::from_slice(&req_body).unwrap();
-	if !registration_code_valid(&db, &create_account.registration_code).await {
+	if !registration_code_valid(&db, registration_code).await {
 		return Err(CreateAccountFromRegistrationCodeError::InvalidRegistrationCode.into());
 	}
 
 	debug!("Creating account");
 	let uuid = crate::cli_commands::create_account::create_account(
 		db.clone(),
-		create_account.username,
+		username.to_string(),
 		AccountType::User,
-		Zeroizing::new(create_account.password),
+		Zeroizing::new(password.to_string()),
 	)
 	.await
 	.into_handler_error()?;

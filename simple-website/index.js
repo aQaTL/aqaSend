@@ -1,6 +1,19 @@
 "use strict";
 
 import { replaceAt } from "./string_utils.mjs";
+import * as Api from "./api.mjs";
+
+async function loadUser() {
+	let username = /** @type {?string} */ (await Api.loadUser());
+	if (username) {
+		console.log(`current user: ${username}`);
+		let userInfoEl = document.getElementById("userInfo");
+		userInfoEl.innerText = username;
+		userInfoEl.style.display = "block";
+	} else {
+		console.log(`No user logged in`);
+	}
+}
 
 /** 
  * Says hello
@@ -14,4 +27,5 @@ function hello(name) {
 
 window.addEventListener("DOMContentLoaded", function(_event) {
 	hello("bob");
+	loadUser();
 });

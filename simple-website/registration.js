@@ -6,7 +6,7 @@ import * as Types from "./models.mjs";
 
 function main() {
 	let loginFormEl = document.getElementById("loginForm");
-	loginFormEl.addEventListener("submit", submitLoginForm);
+	loginFormEl.addEventListener("submit", submitRegistrationForm);
 }
 
 async function loadUser() {
@@ -23,7 +23,7 @@ async function loadUser() {
 
 window.addEventListener("DOMContentLoaded", function(_event) {
 	let greetingEl = document.getElementById("greeting");
-	greetingEl.innerHTML = `Log In`;
+	greetingEl.innerHTML = `Register`;
 	main();
 	loadUser();
 });
@@ -33,13 +33,17 @@ window.addEventListener("DOMContentLoaded", function(_event) {
  *
  * @param {SubmitEvent} event - Event fired when clicked on submit
 */
-function submitLoginForm(event) {
+function submitRegistrationForm(event) {
 	event.preventDefault();
 
 	console.log("Clicked to submit!");
 
 	const loginFormEl = /** @type {HTMLFormElement} */ (document.getElementById("loginForm"));
 	const formData = new FormData(loginFormEl);
+
+	const queryParams = new URLSearchParams(window.location.search);
+	const registrationCode = queryParams.get("invite");
+	formData.append("registration_code", registrationCode);
 
 	const request = new XMLHttpRequest();
 	request.addEventListener("load", (_event) => {
@@ -49,6 +53,6 @@ function submitLoginForm(event) {
 	});
 
 	request.responseType = "json";
-	request.open("POST", `${API_SERVER}/api/login`);
+	request.open("POST", `${API_SERVER}/api/create_account`);
 	request.send(formData);
 }

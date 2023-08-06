@@ -17,7 +17,7 @@
 
 ## Error handling
 
-- [x] Better error type for handling faillible http requests
+- [x] Better error type for handling fallible http requests
     - [x] Separation between internal and external errors
     - [x] User presentable toggle
     - [x] Various error formats (plaintext, json, http)

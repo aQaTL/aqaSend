@@ -1,5 +1,5 @@
 use anyhow::Result;
-use aqa_send::account::{CreateAccountModel, CreateAccountResponse};
+use aqa_send::account::CreateAccountResponse;
 use hyper::body::to_bytes;
 use hyper::header::SET_COOKIE;
 use hyper::service::Service;
@@ -874,7 +874,6 @@ async fn registration_code_works() -> Result<()> {
 
 	debug!("logging in");
 	let boundary = random_string(50);
-
 	let request = Request::builder()
 		.uri("/api/login")
 		.method(Method::POST)
@@ -920,16 +919,27 @@ Content-Disposition: form-data; name=\"password\"\r\n\r\n\
 	let registration_code: Uuid = std::str::from_utf8(&response_body)?.parse()?;
 
 	debug!("Creating account from the registration code");
-	let payload = serde_json::to_vec(&CreateAccountModel {
-		registration_code: registration_code.to_string(),
-		username: "Ola".to_string(),
-		password: password.clone(),
-	})?;
 
+	let boundary = random_string(50);
 	let request = Request::builder()
 		.uri("/api/create_account")
 		.method(Method::POST)
-		.body(Body::from(payload))?;
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"username\"\r\n\r\n\
+Ola\r\n\
+--{boundary}--\r\n\
+Content-Disposition: form-data; name=\"password\"\r\n\r\n\
+{password}\r\n\
+--{boundary}--\r\n\
+Content-Disposition: form-data; name=\"registration_code\"\r\n\r\n\
+{registration_code}\r\n\
+--{boundary}--\r\n"
+		)))?;
 
 	let response = test_server.process_request(request).await?;
 	assert_eq!(response.status(), StatusCode::CREATED);

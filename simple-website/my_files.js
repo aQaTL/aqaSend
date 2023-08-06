@@ -14,7 +14,9 @@ async function loadUser() {
 	let username = /** @type {?string} */ (await Api.loadUser());
 	if (username) {
 		console.log(`current user: ${username}`);
-		document.getElementById("userInfo").innerText = username;
+		let userInfoEl = document.getElementById("userInfo");
+		userInfoEl.innerText = username;
+		userInfoEl.style.display = "block";
 	} else {
 		console.log(`No user logged in`);
 	}

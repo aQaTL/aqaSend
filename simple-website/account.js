@@ -1,0 +1,50 @@
+import { API_SERVER } from "./api_endpoint.mjs";
+import * as Api from "./api.mjs";
+
+async function loadUser() {
+	let username = /** @type {?string} */ (await Api.loadUser());
+	if (username) {
+		console.log(`current user: ${username}`);
+		let userInfoEl = document.getElementById("userInfo");
+		userInfoEl.innerText = username;
+		userInfoEl.style.display = "block";
+	} else {
+		console.log(`No user logged in`);
+	}
+}
+
+window.addEventListener("DOMContentLoaded", function(_event) {
+	let greetingEl = document.getElementById("greeting");
+	greetingEl.innerHTML = `Account`;
+	loadUser();
+
+	document.getElementById("generateCodeBtn").addEventListener("click", generateCode);
+});
+
+async function generateCode(_event) {
+	try {
+		let response = await fetch(`${API_SERVER}/api/registration_code`, {
+			credentials: "include"
+		});
+		if (response.status !== 201) {
+			return;
+		}
+		let generatedCode = await response.text();
+		showOutput(generatedCode);
+	} catch(ex) {
+		console.error(ex);
+	}
+}
+
+/**
+ *
+ * @param {string} generatedCode
+ */
+function showOutput(generatedCode) {
+	document.getElementById("generatedCodeOutput").style.display = "block";
+	let link = `${window.location.origin}/registration.html?invite=${encodeURIComponent(generatedCode)}`;
+
+	let generatedCodeLinkEl = /** @type {HTMLLinkElement} */ (document.getElementById("generatedCodeLink"));
+	generatedCodeLinkEl.href = link;
+	generatedCodeLinkEl.innerText = link;
+}

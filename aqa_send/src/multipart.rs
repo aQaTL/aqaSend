@@ -1,6 +1,8 @@
 use bytes::{Buf, BufMut, BytesMut};
 
+use crate::{HttpHandlerError, StatusCode};
 use futures::StreamExt;
+use hyper::http;
 use hyper::Body;
 use log::debug;
 use thiserror::Error;
@@ -231,4 +233,42 @@ impl Multipart {
 			}
 		}
 	}
+}
+
+#[derive(Debug, Error)]
+pub enum GetBoundaryError {
+	#[error("Upload requires `multipart/form-data` Content-Type")]
+	InvalidContentType,
+
+	#[error("Multipart/form-data upload must define a boundary")]
+	BoundaryExpected,
+}
+
+impl HttpHandlerError for GetBoundaryError {
+	fn code(&self) -> StatusCode {
+		StatusCode::BAD_REQUEST
+	}
+
+	fn user_presentable(&self) -> bool {
+		true
+	}
+}
+
+pub fn get_boundary_from_req(parts: http::request::Parts) -> Result<String, GetBoundaryError> {
+	use GetBoundaryError::{BoundaryExpected, InvalidContentType};
+
+	let content_type = parts
+		.headers
+		.get("content-type")
+		.ok_or(InvalidContentType)?
+		.to_str()
+		.map_err(|_| InvalidContentType)?;
+
+	let boundary = content_type
+		.strip_prefix("multipart/form-data; ")
+		.ok_or(BoundaryExpected)?
+		.strip_prefix("boundary=")
+		.ok_or(BoundaryExpected)?;
+
+	Ok(format!("--{}", boundary))
 }

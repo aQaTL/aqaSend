@@ -2,16 +2,28 @@
 
 import * as Types from  "./models.mjs";
 import { API_SERVER } from "./api_endpoint.mjs";
+import * as Api from "./api.mjs";
 
 function main() {
 	let uploadFormEl = document.getElementById("uploadForm");
 	uploadFormEl.addEventListener("submit", submitUploadForm);
 }
 
+async function loadUser() {
+	let username = /** @type {?string} */ (await Api.loadUser());
+	if (username) {
+		console.log(`current user: ${username}`);
+		document.getElementById("userInfo").innerText = username;
+	} else {
+		console.log(`No user logged in`);
+	}
+}
+
 window.addEventListener("DOMContentLoaded", function(_event) {
 	let greetingEl = document.getElementById("greeting");
 	greetingEl.innerHTML = `Upload`;
 	main();
+	loadUser();
 });
 
 /**

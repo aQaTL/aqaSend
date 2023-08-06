@@ -24,6 +24,10 @@ body {
 	margin: 0 auto;
 }
 
+.hidden {
+	display: none;
+}
+
 #greeting {
 	grid-row: 1;
 	background-color: var(--main-bg-secondary-color);

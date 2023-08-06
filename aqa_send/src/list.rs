@@ -111,15 +111,12 @@ pub async fn list(
 		None => None,
 	};
 
-	let mut only_self_uploads = false;
-	if uploader.is_some() {
-		only_self_uploads = req
-			.uri()
-			.query()
-			.and_then(|query| uri_query_iter(query).find(|(key, _value)| *key == "uploader"))
-			.map(|(_, uploader)| uploader == "me")
-			.unwrap_or_default();
-	}
+	let only_self_uploads = req
+		.uri()
+		.query()
+		.and_then(|query| uri_query_iter(query).find(|(key, _value)| *key == "uploader"))
+		.map(|(_, uploader)| uploader == "me")
+		.unwrap_or_default();
 
 	let db_reader = db.reader().await;
 	let list: Vec<FileModel> = db_reader

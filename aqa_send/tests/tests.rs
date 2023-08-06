@@ -514,7 +514,7 @@ Content-Type: text/plain\r\n\r\n\
 	assert_eq!(response.status(), StatusCode::OK);
 
 	let response_bytes = to_bytes(response.body_mut()).await?;
-	let list: Vec<list::OwnedFileModel> = serde_json::from_slice(&response_bytes)?;
+	let list: Vec<list::FileModel<'static>> = serde_json::from_slice(&response_bytes)?;
 	assert_eq!(list.len(), 0);
 
 	let request = Request::builder()
@@ -527,7 +527,7 @@ Content-Type: text/plain\r\n\r\n\
 	assert_eq!(response.status(), StatusCode::OK);
 
 	let response_bytes = to_bytes(response.body_mut()).await?;
-	let list: Vec<list::OwnedFileModel> = serde_json::from_slice(&response_bytes)?;
+	let list: Vec<list::FileModel<'static>> = serde_json::from_slice(&response_bytes)?;
 	assert_eq!(list.len(), 1);
 
 	Ok(())

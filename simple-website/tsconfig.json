@@ -1,5 +1,6 @@
 {
 	"include": ["./**/*"],
+	"exclude": ["./out"],
 	"compilerOptions": {
 		"allowJs": true,
 		"checkJs": true,

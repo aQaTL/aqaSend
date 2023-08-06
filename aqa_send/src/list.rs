@@ -3,6 +3,8 @@ use crate::{AuthorizedUsers, FileEntry, HandlerError, HttpHandlerError, Lifetime
 use hyper::{Body, Request, Response, StatusCode};
 use log::debug;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
+use std::time::SystemTime;
 use thiserror::Error;
 use tracing::error;
 use uuid::Uuid;
@@ -60,18 +62,20 @@ impl HttpHandlerError for ListError {
 	}
 }
 
-#[derive(Serialize)]
-struct FileModel<'a> {
-	id: &'a Uuid,
-	#[serde(flatten)]
-	file_entry: &'a FileEntry,
-}
+#[derive(Serialize, Deserialize)]
+pub struct FileModel<'a> {
+	pub uuid: Uuid,
 
-#[derive(Deserialize)]
-pub struct OwnedFileModel {
-	pub id: Uuid,
-	#[serde(flatten)]
-	pub file_entry: FileEntry,
+	pub filename: Cow<'a, str>,
+	pub content_type: Cow<'a, str>,
+	pub uploader_uuid: Option<Uuid>,
+
+	pub download_count: u64,
+
+	pub visibility: Visibility,
+
+	pub lifetime: Lifetime,
+	pub upload_date: SystemTime,
 }
 
 pub async fn list(
@@ -148,9 +152,28 @@ pub async fn list(
 
 			true
 		})
-		.map(|(key, value)| FileModel {
-			id: key,
-			file_entry: value,
+		.map(|(key, value)| {
+			let FileEntry {
+				filename,
+				content_type,
+				uploader_uuid,
+				download_count,
+				visibility,
+				lifetime,
+				upload_date,
+				..
+			} = value;
+
+			FileModel {
+				uuid: *key,
+				filename: Cow::Borrowed(filename.as_str()),
+				content_type: Cow::Borrowed(content_type.as_str()),
+				uploader_uuid: *uploader_uuid,
+				download_count: *download_count,
+				visibility: *visibility,
+				lifetime: *lifetime,
+				upload_date: *upload_date,
+			}
 		})
 		.collect();
 

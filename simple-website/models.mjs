@@ -15,7 +15,7 @@
 /**
  * @typedef FileModel
  * @type {object}
- * @property {string} id - file uuid
+ * @property {string} uuid - file uuid
 
  * @property {string} filename - 
  * @property {string} content_type -

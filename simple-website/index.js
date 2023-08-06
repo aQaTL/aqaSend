@@ -1,6 +1,6 @@
 "use strict";
 
-import { replaceAt } from "/string_utils.mjs";
+import { replaceAt } from "./string_utils.mjs";
 
 /** 
  * Says hello

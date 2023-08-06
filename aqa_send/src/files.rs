@@ -9,7 +9,7 @@ pub enum InitAppFolderStructureError {
 }
 
 pub const DB_DIR: &str = "DB";
-pub const DIRS_BY_DOWNLOAD_COUNT: [&str; 5] = ["1", "5", "10", "100", "infinite"];
+pub const DIRS_BY_DOWNLOAD_COUNT: [&str; 8] = ["1", "2", "3", "4", "5", "10", "100", "infinite"];
 
 pub fn init_app_directory_structure(dir: &Path) -> Result<(), InitAppFolderStructureError> {
 	let db_dir = dir.join(DB_DIR);

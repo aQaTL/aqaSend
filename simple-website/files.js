@@ -43,7 +43,7 @@ function displayFiles(files) {
 		fileEntryEl.className = "fileEntry";
 
 		let fileLinkEl = document.createElement("a");
-		fileLinkEl.href = `${API_SERVER}/api/download/${file.id}`;
+		fileLinkEl.href = `${API_SERVER}/api/download/${file.uuid}`;
 
 		let filenameEl = document.createElement("div");
 		filenameEl.className = "fileEntryFilename";

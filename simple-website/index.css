@@ -65,7 +65,7 @@ nav {
 	text-decoration-color: forestgreen;
 }
 
-input[type=text],input[type=password],input[type=submit] {
+input[type=text],input[type=password],input[type=submit],button {
 	color: var(--main-color);
 	background-color: var(--main-bg-secondary-color);
 	border: 1px solid var(--main-bg-color);
@@ -80,8 +80,9 @@ input[type=submit] {
 	cursor: pointer;
 }
 
-input[type=text]:hover,input[type=password]:hover,input[type=submit]:hover {
+input[type=text]:hover,input[type=password]:hover,input[type=submit]:hover,button:hover {
 	background-color: var(--item-bg-color);
+	cursor: pointer;
 }
 
 input[type=file] {
@@ -106,6 +107,11 @@ main {
 	justify-items: center;
 	align-items: center;
 
+}
+
+dialog {
+	background-color: var(--main-bg-secondary-color);
+	color: var(--main-color);
 }
 
 /* ===================== Login ===================== */

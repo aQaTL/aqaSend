@@ -23,12 +23,12 @@
     - [x] Various error formats (plaintext, json, http)
     - [x] Ease of composability (not needing to add Http and Hyper errors everytime)
 
-- [?] For handling errors, create a derive macro 
-	- Annotation to specify error code
-    - Annotation to specify whether the error is user facing or not
-      - We could decide that based off of the error code (don't show 5xx error messages)
-	- Such type must be an enum and implement Debug + Error
-
 # Website
 
-- [ ] Log in page
+- [x] Log in page
+- [x] Account page 
+  - [ ] Generate registration link
+- [ ] Registration page 
+  - no button on the website, accessible by registration link
+- [ ] My files page
+- [ ] Display username of currently logged-in user

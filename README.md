@@ -40,10 +40,6 @@ My clone of Firefox Send.
 For my personal needs, I don't think I need a full database and can manage my data set just fine
 by straight-up loading it into a HashMap.
 
-Dealing with threading.
-
-Well, 
-
 # Messaging protocol
 
 Data will be uploaded using the `multipart/form-data` encoding.

@@ -27,9 +27,6 @@ pub enum ListError {
 	#[error("Malformed {0:?} data")]
 	Malformed(Field),
 
-	#[error("Session expired")]
-	SessionExpired,
-
 	#[error("Authorized user doesn't exist")]
 	UnknownUser,
 }
@@ -41,7 +38,6 @@ impl HttpHandlerError for ListError {
 			ListError::MalformedSessionCookie(_) => StatusCode::BAD_REQUEST,
 			ListError::AsciiOnly(_) => StatusCode::BAD_REQUEST,
 			ListError::Malformed(_) => StatusCode::BAD_REQUEST,
-			ListError::SessionExpired => StatusCode::BAD_REQUEST,
 			ListError::UnknownUser => StatusCode::BAD_REQUEST,
 		}
 	}
@@ -52,7 +48,6 @@ impl HttpHandlerError for ListError {
 			ListError::MalformedSessionCookie(_) => true,
 			ListError::AsciiOnly(_) => true,
 			ListError::Malformed(_) => true,
-			ListError::SessionExpired => true,
 			ListError::UnknownUser => true,
 		}
 	}
@@ -98,15 +93,17 @@ pub async fn list(
 						.parse()
 						.map_err(ListError::MalformedSessionCookie)?;
 
-					let user_uuid = authorized_users
-						.get_user_uuid(&session_cookie)
-						.ok_or(ListError::SessionExpired)?;
-					debug!("Getting user with uuid {user_uuid}");
-					Some(
-						db.get_account(&user_uuid)
-							.await
-							.ok_or(ListError::UnknownUser)?,
-					)
+					match authorized_users.get_user_uuid(&session_cookie) {
+						Some(user_uuid) => {
+							debug!("Getting user with uuid {user_uuid}");
+							Some(
+								db.get_account(&user_uuid)
+									.await
+									.ok_or(ListError::UnknownUser)?,
+							)
+						}
+						None => None,
+					}
 				}
 				None => None,
 			}

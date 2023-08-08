@@ -5,11 +5,6 @@ import {API_SERVER} from "./api_endpoint.mjs";
 import * as PasswordInputDialog from "./password_input_dialog.mjs"
 import * as Api from "./api.mjs";
 
-function hello() {
-	let greetingEl = document.getElementById("greeting");
-	greetingEl.innerHTML = "All files";
-}
-
 async function loadUser() {
 	let username = /** @type {?string} */ (await Api.loadUser());
 	if (username) {
@@ -23,7 +18,6 @@ async function loadUser() {
 }
 
 window.addEventListener("DOMContentLoaded", function (_event) {
-	hello();
 	loadUser();
 	loadFiles();
 	PasswordInputDialog.setup();

@@ -22,8 +22,6 @@ async function loadUser() {
 }
 
 window.addEventListener("DOMContentLoaded", function(_event) {
-	let greetingEl = document.getElementById("greeting");
-	greetingEl.innerHTML = `Register`;
 	main();
 	loadUser();
 });

@@ -1,12 +1,17 @@
 "use strict";
 
-import * as Types from  "./models.mjs";
-import { API_SERVER } from "./api_endpoint.mjs";
+import * as Types from "./models.mjs";
+import {API_SERVER} from "./api_endpoint.mjs";
 import * as Api from "./api.mjs";
 
 function main() {
 	let uploadFormEl = document.getElementById("uploadForm");
 	uploadFormEl.addEventListener("submit", submitUploadForm);
+
+	let fileEl = /**@type{HTMLInputElement}*/(document.getElementById("file"));
+	fileEl.addEventListener("change", (_event) => {
+		updateFileList(fileEl.files);
+	});
 }
 
 async function loadUser() {
@@ -21,9 +26,7 @@ async function loadUser() {
 	}
 }
 
-window.addEventListener("DOMContentLoaded", function(_event) {
-	let greetingEl = document.getElementById("greeting");
-	greetingEl.innerHTML = `Upload`;
+window.addEventListener("DOMContentLoaded", function (_event) {
 	main();
 	loadUser();
 });
@@ -32,7 +35,7 @@ window.addEventListener("DOMContentLoaded", function(_event) {
  * Tries to submit the upload form
  *
  * @param {SubmitEvent} event - Event fired when clicked on submit
-*/
+ */
 function submitUploadForm(event) {
 	event.preventDefault();
 
@@ -83,11 +86,50 @@ function submitUploadForm(event) {
 	request.setRequestHeader("aqa-download-count", downloadCount);
 	request.setRequestHeader("aqa-lifetime", lifetime);
 	request.setRequestHeader("aqa-visibility", visibility);
-	if (password.trim().length !== 0)  {
+	if (password.trim().length !== 0) {
 		request.setRequestHeader("aqa-password", encodeURIComponent(password));
 	}
 	hideInfoMsg();
 	request.send(formData);
+}
+
+/**
+ * @param {FileList} files
+ */
+function updateFileList(files) {
+	let fileUploadFormSectionEl = /**@type{HTMLDivElement}*/(document.getElementById("fileUploadFormSection"));;
+
+	/**@type{?HTMLElement}*/
+	let fileListSectionEl = null;
+	if (fileUploadFormSectionEl.nextElementSibling.id === "selectedFilesListFormSection") {
+		fileListSectionEl = document.getElementById("selectedFilesListFormSection");
+	} else {
+		fileListSectionEl = document.createElement("section");
+		fileListSectionEl.id = "selectedFilesListFormSection";
+		fileListSectionEl.className = "uploadFormSection";
+
+		let textDiv = document.createElement("div");
+		textDiv.append("Selected files:")
+		textDiv.appendChild(document.createElement("ul"))
+		fileListSectionEl.appendChild(textDiv);
+
+		fileUploadFormSectionEl.insertAdjacentElement("afterend", fileListSectionEl);
+	}
+
+	let fileListEl = /**@type{HTMLUListElement}*/(fileListSectionEl.querySelector("ul"));
+
+	while (fileListEl.firstChild) {
+		fileListEl.removeChild(fileListEl.lastChild);
+	}
+
+	for (let i = 0; i < files.length; i++) {
+		let file = files[i];
+
+		let fileNameEl = document.createElement("div");
+		fileNameEl.appendChild(document.createTextNode(file.name));
+
+		fileListEl.appendChild(fileNameEl);
+	}
 }
 
 const UPLOAD_RESULT_SUCCESS = 0;
@@ -95,33 +137,33 @@ const UPLOAD_RESULT_FAILURE = 1;
 
 /**
  * Displays a block with info operation result.
- * 
- * @param {string} msg - Message to display in the box 
+ *
+ * @param {string} msg - Message to display in the box
  * @param {number} result - One of: [UPLOAD_RESULT_SUCCESS, UPLOAD_RESULT_FAILURE]
-*/
+ */
 function displayInfoMsg(msg, result) {
 	let infoMsgEl = document.getElementById("infoMsg");
 	switch (result) {
-		case UPLOAD_RESULT_SUCCESS:
-		{
+		case UPLOAD_RESULT_SUCCESS: {
 			infoMsgEl.style.display = "block";
 			infoMsgEl.className = "infoMsgSuccess";
 			infoMsgEl.innerText = msg;
-			
-		} break;
-		case UPLOAD_RESULT_FAILURE:
-		{
+
+		}
+			break;
+		case UPLOAD_RESULT_FAILURE: {
 			infoMsgEl.style.display = "block";
 			infoMsgEl.className = "infoMsgFailure";
 			infoMsgEl.innerText = msg;
-			
-		} break;
+
+		}
+			break;
 	}
 }
 
 /**
  * Hides the infoMsg box
-*/
+ */
 function hideInfoMsg() {
 	let infoMsgEl = document.getElementById("infoMsg");
 	infoMsgEl.style.display = "none";

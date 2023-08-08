@@ -4,29 +4,29 @@
 	<meta charset="utf-8" />
 	<title>aQaSend</title>
     <meta name="viewport" content="width=device-width"/>
-	<link rel="icon" href="/favicon.png" />
-	<link rel="stylesheet" href="/index.css" /> 
+	<link rel="icon" href="favicon.png" />
+	<link rel="stylesheet" href="index.css" />
 </head>
 
 <body>
 	<nav>
-		<div id="greeting"></div>
+		<div id="greeting">Upload</div>
 
-		<a class="menuLink" href="/files.html">Files</a>
-		<a class="menuLink" href="/my_files.html">My Files</a>
-		<a class="menuLink" href="/upload.html">Upload</a>
-		<a class="menuLink" href="/log_in.html">Log in</a>
+		<a class="menuLink" href="files.html">Files</a>
+		<a class="menuLink" href="my_files.html">My Files</a>
+		<a class="menuLink" href="upload.html">Upload</a>
+		<a class="menuLink" href="log_in.html">Log in</a>
 
-		<a class="menuLink hidden" href="/account.html" id="userInfo"></a>
+		<a class="menuLink hidden" href="account.html" id="userInfo"></a>
 	</nav>
 
 	<main>
-		<div id="infoMsg">
+		<div id="infoMsg" class="hidden">
 			Sample message
 		</div>
 		<form id="uploadForm">
 			<section class="uploadFormSection">
-				<label for="visibility-select"">Visibility</label>
+				<label for="visibility-select">Visibility</label>
 				<select name="visibility" id="visibility-select">
 					<option value="public">Public</option>
 					<option value="private">Private</option>
@@ -65,10 +65,10 @@
 				<input type="password" id="password" name="password" />
 			</section>
 
-			<section class="uploadFormSection">
+			<section class="uploadFormSection" id="fileUploadFormSection">
 				<div id="fileUploadContainer">
-					<label for="file" class="fileUploadBox">📂 Select files</label>
-					<input type="file" id="file" name="filename">
+					<label for="file" class="fileUploadBox" >📂 Select files</label>
+					<input type="file" id="file" name="filename" multiple>
 				</div>
 			</section>
 
@@ -78,6 +78,6 @@
 		</form>
 	</main>
 
-	<script type="module" src="/upload.js"></script>
+	<script type="module" src="upload.js"></script>
 </body>
 </html>

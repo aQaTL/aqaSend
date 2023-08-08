@@ -26,9 +26,17 @@
 # Website
 
 - [x] Log in page
+    - [ ] Redirect somewhere or display success or refresh the page on successful login 
 - [x] Account page 
-  - [ ] Generate registration link
-- [ ] Registration page 
+  - [x] Generate registration link
+- [x] Registration page 
   - no button on the website, accessible by registration link
-- [ ] My files page
+  - [ ] Display result of account creation 
+- [x] My files page
 - [ ] Display username of currently logged-in user
+- [ ] Being able to select whether the registration code should be for an admin or a regular
+  account
+- [ ] Check the registration code when loading the registration page
+- [ ] Move infoMsg from upload.js into a reusable component (info_msg_box.js)
+- [x] (upload) Display selected files
+- [ ] (upload) upload progress

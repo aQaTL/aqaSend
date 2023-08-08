@@ -14,8 +14,6 @@ async function loadUser() {
 }
 
 window.addEventListener("DOMContentLoaded", function(_event) {
-	let greetingEl = document.getElementById("greeting");
-	greetingEl.innerHTML = `Account`;
 	loadUser();
 
 	document.getElementById("generateCodeBtn").addEventListener("click", generateCode);

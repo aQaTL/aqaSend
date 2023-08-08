@@ -132,8 +132,6 @@ dialog {
 /* ===================== Upload ===================== */
 
 #infoMsg {
-	display: none;
-	
 	padding: 0.5em;
 
 	border: 1px solid var(--main-bg-secondary-color);
@@ -174,7 +172,6 @@ dialog {
 
 #fileUploadContainer {
 	flex-grow: 2;
-
 }
 
 .fileUploadBox { 

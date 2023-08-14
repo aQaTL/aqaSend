@@ -87,7 +87,6 @@ impl Multipart {
 		Ok(chunks)
 	}
 
-	#[tracing::instrument]
 	pub async fn read_header(&mut self) -> Result<MultipartHeader, MultipartError> {
 		use MultipartError::*;
 

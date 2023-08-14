@@ -3,6 +3,7 @@
 import { API_SERVER } from "./api_endpoint.mjs";
 import * as Api from "./api.mjs";
 import * as Types from "./models.mjs";
+import InfoMsgBox from "./info_msg_box/info_msg_box.mjs";
 
 function main() {
 	let loginFormEl = document.getElementById("loginForm");
@@ -43,11 +44,22 @@ function submitRegistrationForm(event) {
 	const registrationCode = queryParams.get("invite");
 	formData.append("registration_code", registrationCode);
 
+	const registrationResult = InfoMsgBox.getById("registrationResult");
+
 	const request = new XMLHttpRequest();
 	request.addEventListener("load", (_event) => {
-		/** @type {Types.ErrorJsonBody} */
-		const response = request.response;
-		console.log("success: " + JSON.stringify(response));
+		if (request.status !== 201) {
+			/** @type {Types.ErrorJsonBody} */
+			const response = request.response;
+
+			registrationResult.displaySuccess(response.message);
+		} else {
+			/** @type {Types.CreateAccountResponse} */
+			const response = request.response;
+			console.log("success: " + JSON.stringify(response));
+			
+			registrationResult.displaySuccess("Account created");
+		}
 	});
 
 	request.responseType = "json";

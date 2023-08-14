@@ -170,26 +170,27 @@ async fn handle_response<E>(
 where
 	E: HttpHandlerError,
 {
-	match resp.await {
-		Ok(mut resp) => {
-			if let Some(hv) = origin_header {
-				resp.headers_mut().append("Access-Control-Allow-Origin", hv);
-			}
+	let mut resp = match resp.await {
+		Ok(resp) => {
 			debug!("Response {}", resp.status());
-			Ok(resp)
+			resp
 		}
 		Err(err) => {
 			// let backtrace = Backtrace::new();
 			// error!("{:?}", backtrace);
 
-			let mut resp = err.response();
+			let resp = err.response();
 			error!("{}; {err:?}", resp.status());
-			if let Some(hv) = origin_header {
-				resp.headers_mut().append("Access-Control-Allow-Origin", hv);
-			}
-			Ok(resp)
+			resp
 		}
+	};
+
+	if let Some(hv) = origin_header {
+		resp.headers_mut().append("Access-Control-Allow-Origin", hv);
+		resp.headers_mut()
+			.append("Access-Control-Allow-Credentials", "true".parse().unwrap());
 	}
+	Ok(resp)
 }
 
 async fn preflight_request(req: Request<Body>) -> Result<Response<Body>, AqaServiceError> {
@@ -208,6 +209,7 @@ async fn preflight_request(req: Request<Body>) -> Result<Response<Body>, AqaServ
 			),
 		)
 		.header("Access-Control-Max-Age", (60 * 60).to_string())
+		.header("Access-Control-Allow-Credentials", "true")
 		.body(Body::from(""))?)
 }
 

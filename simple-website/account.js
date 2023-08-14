@@ -1,5 +1,6 @@
 import { API_SERVER } from "./api_endpoint.mjs";
 import * as Api from "./api.mjs";
+import InfoMsgBox from "./info_msg_box/info_msg_box.mjs";
 
 async function loadUser() {
 	let username = /** @type {?string} */ (await Api.loadUser());
@@ -20,15 +21,17 @@ window.addEventListener("DOMContentLoaded", function(_event) {
 });
 
 async function generateCode(_event) {
+	let messageBox = InfoMsgBox.getById("messageBox");
 	try {
 		let response = await fetch(`${API_SERVER}/api/registration_code`, {
 			credentials: "include"
 		});
+		let responseText = await response.text();
 		if (response.status !== 201) {
+			messageBox.displayFailure(responseText);
 			return;
 		}
-		let generatedCode = await response.text();
-		showOutput(generatedCode);
+		showOutput(responseText);
 	} catch(ex) {
 		console.error(ex);
 	}

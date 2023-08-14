@@ -3,6 +3,11 @@
 import * as Types from "./models.mjs";
 import {API_SERVER} from "./api_endpoint.mjs";
 import * as Api from "./api.mjs";
+import InfoMsgBox from "./info_msg_box/info_msg_box.mjs";
+
+function sayHello() {
+	console.log("Hello world from a custom component");
+}
 
 function main() {
 	let uploadFormEl = document.getElementById("uploadForm");
@@ -56,19 +61,21 @@ function submitUploadForm(event) {
 	}
 
 	const request = new XMLHttpRequest();
+	const resultBox = InfoMsgBox.getById("uploadResult");
+
 	request.addEventListener("load", (_event) => {
 		if (request.status === 200) {
 			/** @type {[Types.UploadedFile]} */
 			const response = request.response;
 
 			console.log("success: " + JSON.stringify(response));
-			displayInfoMsg(`Successfully uploaded ${response.length} files`, UPLOAD_RESULT_SUCCESS);
+			resultBox.displaySuccess(`Successfully uploaded ${response.length} files`);
 		} else {
 			/** @type {Types.ErrorJsonBody} */
 			const response = request.response;
 
 			console.error("error: " + JSON.stringify(response));
-			displayInfoMsg(`Upload failed: ${response.message}`, UPLOAD_RESULT_FAILURE);
+			resultBox.displayFailure(`Upload failed: ${response.message}`);
 		}
 	});
 
@@ -76,10 +83,14 @@ function submitUploadForm(event) {
 		/** @type {Types.ErrorJsonBody} */
 		const response = request.response;
 
-		console.error("error: " + JSON.stringify(response));
-		displayInfoMsg(`Upload failed: ${response.message}`, UPLOAD_RESULT_FAILURE);
+		console.error("error: " + response && JSON.stringify(response) || "");
+		resultBox.displayFailure(`Upload failed`);
 	});
 
+	request.upload.addEventListener("progress", (event) => {
+		const percentage = Math.round((event.loaded * 100.0 / event.total) || 100);
+		resultBox.displaySuccess(`Uploading... ${percentage}%`);
+	});
 
 	request.responseType = "json";
 	request.open("POST", `${API_SERVER}/api/upload`);
@@ -89,7 +100,7 @@ function submitUploadForm(event) {
 	if (password.trim().length !== 0) {
 		request.setRequestHeader("aqa-password", encodeURIComponent(password));
 	}
-	hideInfoMsg();
+	resultBox.hide();
 	request.send(formData);
 }
 
@@ -130,41 +141,4 @@ function updateFileList(files) {
 
 		fileListEl.appendChild(fileNameEl);
 	}
-}
-
-const UPLOAD_RESULT_SUCCESS = 0;
-const UPLOAD_RESULT_FAILURE = 1;
-
-/**
- * Displays a block with info operation result.
- *
- * @param {string} msg - Message to display in the box
- * @param {number} result - One of: [UPLOAD_RESULT_SUCCESS, UPLOAD_RESULT_FAILURE]
- */
-function displayInfoMsg(msg, result) {
-	let infoMsgEl = document.getElementById("infoMsg");
-	switch (result) {
-		case UPLOAD_RESULT_SUCCESS: {
-			infoMsgEl.style.display = "block";
-			infoMsgEl.className = "infoMsgSuccess";
-			infoMsgEl.innerText = msg;
-
-		}
-			break;
-		case UPLOAD_RESULT_FAILURE: {
-			infoMsgEl.style.display = "block";
-			infoMsgEl.className = "infoMsgFailure";
-			infoMsgEl.innerText = msg;
-
-		}
-			break;
-	}
-}
-
-/**
- * Hides the infoMsg box
- */
-function hideInfoMsg() {
-	let infoMsgEl = document.getElementById("infoMsg");
-	infoMsgEl.style.display = "none";
 }

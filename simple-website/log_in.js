@@ -3,6 +3,7 @@
 import { API_SERVER } from "./api_endpoint.mjs";
 import * as Api from "./api.mjs";
 import * as Types from "./models.mjs";
+import InfoMsgBox from "./info_msg_box/info_msg_box.mjs";
 
 function main() {
 	let loginFormEl = document.getElementById("loginForm");
@@ -39,11 +40,17 @@ function submitLoginForm(event) {
 	const loginFormEl = /** @type {HTMLFormElement} */ (document.getElementById("loginForm"));
 	const formData = new FormData(loginFormEl);
 
+	const resultBox = InfoMsgBox.getById("loginResult");
+
 	const request = new XMLHttpRequest();
 	request.addEventListener("load", (_event) => {
-		/** @type {Types.ErrorJsonBody} */
-		const response = request.response;
-		console.log("success: " + JSON.stringify(response));
+		if (request.status !== 201) {
+			/** @type {Types.ErrorJsonBody} */
+			const response = request.response;
+			resultBox.displayFailure(response.message);
+		} else {
+			resultBox.displaySuccess("Logged in successfully");
+		}
 	});
 
 	request.responseType = "json";

@@ -43,5 +43,11 @@
  * @property {number} nanos -
  */
 
+/**
+ * @typedef CreateAccountResponse
+ * @type {object}
+ * @property {uuid} string -
+ */
+
 
 export const Types = {};

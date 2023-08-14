@@ -3,6 +3,8 @@
 	"exclude": ["./out"],
 	"compilerOptions": {
 		"lib": ["es2021", "dom"],
+		"target": "ES2021",
+		"moduleResolution": "node",
 		"allowJs": true,
 		"checkJs": true,
 		"noEmit": true

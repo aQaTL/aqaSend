@@ -244,7 +244,6 @@ pub enum MultipartError {
 }
 
 impl Multipart {
-	#[tracing::instrument]
 	pub async fn read_header(&mut self) -> Result<MultipartHeader, MultipartError> {
 		use MultipartError::*;
 
@@ -347,7 +346,6 @@ impl Multipart {
 		})
 	}
 
-	#[tracing::instrument]
 	pub async fn read_data(&mut self) -> Option<Result<BytesMut, MultipartError>> {
 		if self.buf.is_empty() {
 			match self.body.next().await {

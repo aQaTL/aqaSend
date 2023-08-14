@@ -129,10 +129,11 @@ dialog {
 	grid-row-gap: 0.5em;
 }
 
-/* ===================== Upload ===================== */
+/* ===================== InfoMsgBox ===================== */
 
-#infoMsg {
+.infoMsgBox {
 	padding: 0.5em;
+	margin: 0.5em;
 
 	border: 1px solid var(--main-bg-secondary-color);
 	border-radius: 5px;
@@ -145,6 +146,8 @@ dialog {
 .infoMsgFailure {
 	background-color: var(--failure-color);
 }
+
+/* ===================== Upload ===================== */
 
 #uploadForm {
 	display: grid;

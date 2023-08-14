@@ -37,6 +37,7 @@
 - [ ] Being able to select whether the registration code should be for an admin or a regular
   account
 - [ ] Check the registration code when loading the registration page
-- [ ] Move infoMsg from upload.js into a reusable component (info_msg_box.js)
+- [x] Move infoMsg from upload.js into a reusable component (info_msg_box.mjs)
 - [x] (upload) Display selected files
-- [ ] (upload) upload progress
+- [x] (upload) upload progress
+- [ ] Progress spinner and neutral message support for InfoMsgBox 

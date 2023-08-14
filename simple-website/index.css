@@ -58,6 +58,7 @@ nav {
 	border-radius: 5px;
 	padding: 0.5em 1em 0.5em 1em;
 	background-color: var(--item-bg-color);
+	color: var(--main-color);
 
 	text-decoration: none;
 }

@@ -8,12 +8,13 @@
 - [x] Cli command to create account
 - [x] Log in api
 - [x] Add a trait bound `Into<Response<Body>>` to handle_response, so that the error variant
-	can also generate a response
+    can also generate a response
 - [ ] Have two APIs: JSON (main one) and old school html redirect driven that will use the JSON one
-	internally
+    internally
 - [ ] Log out api
 - [x] API to generate a registration link
 - [x] Creating account from registration code
+- [ ] Admin and normal user registration code types
 
 ## Error handling
 

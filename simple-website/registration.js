@@ -52,7 +52,7 @@ function submitRegistrationForm(event) {
 			/** @type {Types.ErrorJsonBody} */
 			const response = request.response;
 
-			registrationResult.displaySuccess(response.message);
+			registrationResult.displayFailure(response.message);
 		} else {
 			/** @type {Types.CreateAccountResponse} */
 			const response = request.response;

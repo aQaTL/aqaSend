@@ -32,9 +32,9 @@
   - [x] Generate registration link
 - [x] Registration page 
   - no button on the website, accessible by registration link
-  - [ ] Display result of account creation 
+  - [x] Display result of account creation 
 - [x] My files page
-- [ ] Display username of currently logged-in user
+- [x] Display username of currently logged-in user
 - [ ] Being able to select whether the registration code should be for an admin or a regular
   account
 - [ ] Check the registration code when loading the registration page

@@ -46,7 +46,7 @@
 /**
  * @typedef CreateAccountResponse
  * @type {object}
- * @property {uuid} string -
+ * @property {string} uuid -
  */
 
 

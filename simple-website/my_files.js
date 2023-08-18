@@ -2,8 +2,8 @@
 
 import * as Types from "./models.mjs"
 import {API_SERVER} from "./api_endpoint.mjs";
-import * as PasswordInputDialog from "./password_input_dialog.mjs";
-import * as Api from "./api.mjs"
+import PasswordInput from "./password_input_dialog.mjs";
+import * as Api from "./api.mjs";
 
 async function loadUser() {
 	let username = /** @type {?string} */ (await Api.loadUser());
@@ -20,7 +20,6 @@ async function loadUser() {
 window.addEventListener("DOMContentLoaded", function (_event) {
 	loadUser();
 	loadMyFiles();
-	PasswordInputDialog.setup();
 });
 
 async function loadMyFiles() {
@@ -48,7 +47,7 @@ function displayFiles(files) {
 			fileLinkEl.href = "javascript:void(0);";
 
 			fileLinkEl.addEventListener("click", async (_) => {
-				PasswordInputDialog.show(fileLinkEl);
+				PasswordInput.getById("passwordInput").prompt(fileLinkEl);
 			});
 
 			fileLinkEl.addEventListener("passwordInputDone", (/** @type {CustomEvent} */ event) => {

@@ -15,6 +15,7 @@
 - [x] API to generate a registration link
 - [x] Creating account from registration code
 - [x] Admin and normal user registration code types
+- [ ] Delete invite code after 1 use 
 
 ## Error handling
 

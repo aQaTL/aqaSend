@@ -14,7 +14,7 @@
 - [ ] Log out api
 - [x] API to generate a registration link
 - [x] Creating account from registration code
-- [ ] Admin and normal user registration code types
+- [x] Admin and normal user registration code types
 
 ## Error handling
 

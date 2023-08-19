@@ -269,7 +269,7 @@ impl HttpHandlerError for CreateRegistrationCodeError {
 	}
 
 	fn content_type() -> ErrorContentType {
-		ErrorContentType::Json
+		ErrorContentType::PlainText
 	}
 }
 

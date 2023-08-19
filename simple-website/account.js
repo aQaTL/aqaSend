@@ -33,12 +33,12 @@ async function generateCode(event) {
 		let response = await fetch(`${API_SERVER}/api/registration_code/${accountKind}`, {
 			credentials: "include"
 		});
-		let responseBody = /** @type {Types.ErrorJsonBody|string} */(await response.json());
+		let responseText = await response.text();
 		if (response.status !== 201) {
-			messageBox.displayFailure(/**@type{Types.ErrorJsonBody}*/(responseBody).message);
+			messageBox.displayFailure(responseText);
 			return;
 		}
-		showOutput(/**@type{string}*/(responseBody));
+		showOutput(responseText);
 	} catch(ex) {
 		console.error(ex);
 	}

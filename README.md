@@ -63,3 +63,8 @@ So, registration will work in an invitation-based system.
 
 ## Invitation based system
 
+# Screenshots
+
+## Upload
+
+![upload](https://github.com/aQaTL/aqaSend/assets/17130832/5f633aff-4474-464b-b568-e9ba4c42dc38)

@@ -23,10 +23,21 @@
 	<main>
 		<info-msg-box id="messageBox"></info-msg-box>
 
-		<div>
+		<form id="generateRegistrationLinkForm">
 			<label for="generateCodeBtn">Generate registration link</label>
+
+			<fieldset>
+				<legend>Account type</legend>
+
+				<input id="accountKindAdmin" type="radio" name="accountKind" value="admin">
+				<label for="accountKindAdmin">Admin</label>
+
+				<input id="accountKindUser" type="radio" name="accountKind" value="user" checked>
+				<label for="accountKindUser">User</label>
+			</fieldset>
+
 			<input type="button" value="Generate" id="generateCodeBtn" />
-		</div>
+		</form>
 		<div id="generatedCodeOutput" class="hidden">
 			<span>Generated registration link: </span>
 			<a id="generatedCodeLink"></a>

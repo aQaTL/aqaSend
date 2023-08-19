@@ -42,3 +42,4 @@
 - [x] (upload) Display selected files
 - [x] (upload) upload progress
 - [ ] Progress spinner and neutral message support for InfoMsgBox 
+- [ ] Turn navigation into a web component

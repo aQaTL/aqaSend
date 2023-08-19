@@ -1,3 +1,8 @@
+@font-face {
+	font-family: "Cascadia Code";
+	src: url("/fonts/CascadiaCode.woff2");
+}
+
 :root {
 	--main-color: #f99eb7;
 	--main-bg-color: #1a1c20;
@@ -14,7 +19,7 @@ body {
 
 	font-size: 12pt;
 
-	font-family: monospace; 
+	font-family: "Cascadia Code", monospace;
 
 	display: grid;
 	grid-template-rows: auto minmax(300px, auto);
@@ -81,7 +86,7 @@ input[type=text],input[type=password],input[type=submit],input[type=button],butt
 	padding: 0.5em 1em 0.5em 1em;
 	border-radius: 5px;
 
-	font-family: monospace;
+	font-family: "Cascadia Code", monospace;
 	font-size: 12pt;
 }
 
@@ -89,7 +94,7 @@ input[type=submit] {
 	cursor: pointer;
 }
 
-input[type=text]:hover,input[type=password]:hover,input[type=submit]:hover,input[type=button],button:hover {
+input[type=text]:hover,input[type=password]:hover,input[type=submit]:hover,input[type=button]:hover,button:hover {
 	background-color: var(--item-bg-color);
 	cursor: pointer;
 }
@@ -105,8 +110,12 @@ select {
 	padding: 0.5em 1em 0.5em 1em;
 	border-radius: 5px;
 
-	font-family: monospace;
+	font-family: "Cascadia Code", monospace;
 	font-size: 12pt;
+}
+
+fieldset {
+	border-color: var(--main-bg-secondary-color);
 }
 
 main {
@@ -115,7 +124,6 @@ main {
 	display: inline-grid;
 	justify-items: center;
 	align-items: center;
-
 }
 
 dialog {
@@ -193,7 +201,7 @@ dialog {
 	padding: 0.5em 1em 0.5em 1em;
 	border-radius: 5px;
 
-	font-family: monospace;
+	font-family: "Cascadia Code", monospace;
 	font-size: 12pt;
 }
 
@@ -238,6 +246,22 @@ a:visited {
 
 .fileEntryPrivate {
 	border: 2px solid gold;
+}
+
+/* ===================== Account ===================== */
+
+#generateRegistrationLinkForm {
+	display: flex;
+	flex-direction: column;
+	row-gap: 1em;
+}
+
+#generateRegistrationLinkForm > fieldset {
+	display: grid;
+	grid-template-columns: auto auto;
+	justify-items: start;
+	justify-content: start;
+	grid-row-gap: 0.5em;
 }
 
 /* ===================== Mobile version ===================== */

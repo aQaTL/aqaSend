@@ -1,3 +1,4 @@
+import * as Types from "./models.mjs";
 import { API_SERVER } from "./api_endpoint.mjs";
 import * as Api from "./api.mjs";
 import InfoMsgBox from "./info_msg_box/info_msg_box.mjs";
@@ -20,18 +21,24 @@ window.addEventListener("DOMContentLoaded", function(_event) {
 	document.getElementById("generateCodeBtn").addEventListener("click", generateCode);
 });
 
-async function generateCode(_event) {
+async function generateCode(event) {
+	event.preventDefault();
+
 	let messageBox = InfoMsgBox.getById("messageBox");
+
+	let formEl = /**@type {HTMLFormElement}*/(document.getElementById("generateRegistrationLinkForm"));
+	let accountKind = formEl.elements["accountKind"].value;
+
 	try {
-		let response = await fetch(`${API_SERVER}/api/registration_code`, {
+		let response = await fetch(`${API_SERVER}/api/registration_code/${accountKind}`, {
 			credentials: "include"
 		});
-		let responseText = await response.text();
+		let responseBody = /** @type {Types.ErrorJsonBody|string} */(await response.json());
 		if (response.status !== 201) {
-			messageBox.displayFailure(responseText);
+			messageBox.displayFailure(/**@type{Types.ErrorJsonBody}*/(responseBody).message);
 			return;
 		}
-		showOutput(responseText);
+		showOutput(/**@type{string}*/(responseBody));
 	} catch(ex) {
 		console.error(ex);
 	}

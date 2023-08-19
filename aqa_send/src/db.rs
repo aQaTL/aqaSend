@@ -1,4 +1,5 @@
 use log::{debug, info};
+use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fs::File;
@@ -13,7 +14,7 @@ use uuid::Uuid;
 
 use crate::db_stuff::Account;
 use crate::files::InitAppFolderStructureError;
-use crate::{files, FileEntry, DB_DIR};
+use crate::{files, AccountType, FileEntry, DB_DIR};
 
 const DB_FILE: &str = "index";
 const ACCOUNTS_FILE: &str = "accounts";
@@ -70,11 +71,15 @@ pub fn init(working_dir: &Path) -> Result<Db, DbError> {
 	}
 
 	debug!("Reading {REGISTRATION_CODES_PATH} file");
-	let registration_codes: Vec<String> = match File::open(&registration_codes_path) {
-		Ok(mut file) => serde_json::from_reader(&mut file).map_err(|err| DbError::Io {
-			error: err.into(),
-			file: REGISTRATION_CODES_PATH,
-		})?,
+	let registration_codes: RegistrationCodesVec = match File::open(&registration_codes_path) {
+		Ok(mut file) => {
+			serde_json::from_reader::<_, RegistrationCodesVec>(&mut file).map_err(|err| {
+				DbError::Io {
+					error: err.into(),
+					file: REGISTRATION_CODES_PATH,
+				}
+			})?
+		}
 		Err(err) if err.kind() == ErrorKind::NotFound => Default::default(),
 		Err(err) => {
 			return Err(DbError::Io {
@@ -127,13 +132,19 @@ pub enum DbIoError {
 pub type DbDataHM = HashMap<Uuid, FileEntry>;
 pub type AccountsHM = HashMap<Uuid, Account>;
 pub type AccountUuidsHM = HashMap<String, Uuid>;
-pub type RegistrationCodesVec = Vec<String>;
+pub type RegistrationCodesVec = Vec<RegistrationCode>;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegistrationCode {
+	pub code: String,
+	pub account_kind: AccountType,
+}
 
 #[derive(Debug)]
 pub struct Db {
 	file_entries: Arc<RwLock<DbDataHM>>,
 	accounts: Arc<RwLock<AccountsHM>>,
-	registration_codes: Arc<RwLock<Vec<String>>>,
+	registration_codes: Arc<RwLock<RegistrationCodesVec>>,
 
 	account_uuids: Arc<RwLock<AccountUuidsHM>>,
 

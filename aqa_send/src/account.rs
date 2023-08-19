@@ -2,8 +2,9 @@ use crate::cookie::parse_cookie;
 use crate::db_stuff::AccountType;
 use crate::error::{ErrorContentType, Field, IntoHandlerError};
 use crate::multipart::{self, Multipart, MultipartError};
-use crate::{cli_commands, Account, AuthorizedUsers, Db, HandlerError, HttpHandlerError};
+use crate::{Account, AuthorizedUsers, Db, HandlerError, HttpHandlerError};
 
+use crate::db::RegistrationCode;
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use hyper::http::HeaderValue;
 use hyper::{Body, HeaderMap, Request, Response, StatusCode};
@@ -276,6 +277,7 @@ pub async fn create_registration_code(
 	req: Request<Body>,
 	db: Db,
 	authorized_users: AuthorizedUsers,
+	account_kind: AccountType,
 ) -> Result<Response<Body>, HandlerError<CreateRegistrationCodeError>> {
 	let current_user = get_logged_in_user(req.headers(), db.clone(), authorized_users.clone())
 		.await
@@ -287,9 +289,10 @@ pub async fn create_registration_code(
 	}
 
 	let registration_code = Uuid::new_v4().to_string();
-	db.registration_codes_writer()
-		.await
-		.push(registration_code.clone());
+	db.registration_codes_writer().await.push(RegistrationCode {
+		code: registration_code.clone(),
+		account_kind,
+	});
 
 	Ok(Response::builder()
 		.status(StatusCode::CREATED)
@@ -318,7 +321,7 @@ pub enum CreateAccountFromRegistrationCodeError {
 	Utf8 { place: &'static str },
 
 	#[error(transparent)]
-	CreateAccount(#[from] cli_commands::create_account::CreateAccountError),
+	CreateAccount(#[from] crate::cli_commands::create_account::CreateAccountError),
 }
 
 impl HttpHandlerError for CreateAccountFromRegistrationCodeError {
@@ -406,15 +409,17 @@ pub async fn create_account_from_registration_code(
 	let password = password.ok_or(CreateAccountFromRegistrationCodeError::BadRequest)?;
 
 	debug!("Validating registration code");
-	if !registration_code_valid(&db, registration_code).await {
+	let Some(RegistrationCode { account_kind, .. }) =
+		find_registration_code(&db, registration_code).await else
+	{
 		return Err(CreateAccountFromRegistrationCodeError::InvalidRegistrationCode.into());
-	}
+	};
 
 	debug!("Creating account");
 	let uuid = crate::cli_commands::create_account::create_account(
 		db.clone(),
 		username.to_string(),
-		AccountType::User,
+		account_kind,
 		Zeroizing::new(password.to_string()),
 	)
 	.await
@@ -461,21 +466,32 @@ impl HttpHandlerError for CheckRegistrationCodeError {
 	}
 }
 
+#[derive(Serialize)]
+struct CheckRegistrationCodeResponse {
+	account_kind: AccountType,
+}
+
 pub async fn check_registration_code(
 	_req: Request<Body>,
 	registration_code: String,
 	db: Db,
 ) -> Result<Response<Body>, HandlerError<CheckRegistrationCodeError>> {
-	if !registration_code_valid(&db, &registration_code).await {
+	let Some(RegistrationCode { account_kind, .. }) = find_registration_code(&db, &registration_code).await else {
 		return Err(CheckRegistrationCodeError::InvalidRegistrationCode.into());
-	}
+	};
+
+	let resp_body =
+		serde_json::to_vec_pretty(&CheckRegistrationCodeResponse { account_kind }).unwrap();
 
 	Ok(Response::builder()
 		.status(StatusCode::OK)
-		.body(Body::empty())?)
+		.body(Body::from(resp_body))?)
 }
 
-pub async fn registration_code_valid(db: &Db, registration_code: &str) -> bool {
+pub async fn find_registration_code(db: &Db, registration_code: &str) -> Option<RegistrationCode> {
 	let registration_codes = db.registration_codes_reader().await;
-	registration_codes.iter().any(|v| *v == registration_code)
+	registration_codes
+		.iter()
+		.find(|v| v.code == registration_code)
+		.cloned()
 }

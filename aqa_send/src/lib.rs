@@ -129,14 +129,22 @@ impl Service<Request<Body>> for AqaService {
 				account::logout(req, self.db.clone(), self.authorized_users.clone()),
 				origin_header,
 			)),
-			(Method::GET, ["api", "registration_code"]) => Box::pin(handle_response(
-				account::create_registration_code(
-					req,
-					self.db.clone(),
-					self.authorized_users.clone(),
-				),
-				origin_header,
-			)),
+			(Method::GET, ["api", "registration_code", kind @ "admin" | kind @ "user"]) => {
+				let account_kind = match *kind {
+					"admin" => AccountType::Admin,
+					"user" => AccountType::User,
+					_ => unreachable!(),
+				};
+				Box::pin(handle_response(
+					account::create_registration_code(
+						req,
+						self.db.clone(),
+						self.authorized_users.clone(),
+						account_kind,
+					),
+					origin_header,
+				))
+			}
 			(Method::POST, ["api", "create_account"]) => Box::pin(handle_response(
 				account::create_account_from_registration_code(
 					req,

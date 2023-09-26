@@ -49,5 +49,15 @@
  * @property {string} uuid -
  */
 
+/**
+ * @typedef CheckRegistrationCodeResponse
+ * @type {object}
+ * @property {AccountKind} account_kind -
+*/
+
+/**
+ * @typedef AccountKind
+ * @type {"Admin"|"User"}
+*/
 
 export const Types = {};

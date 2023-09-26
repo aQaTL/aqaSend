@@ -410,8 +410,8 @@ pub async fn create_account_from_registration_code(
 
 	debug!("Validating registration code");
 	let Some(RegistrationCode { account_kind, .. }) =
-		find_registration_code(&db, registration_code).await else
-	{
+		find_registration_code(&db, registration_code).await
+	else {
 		return Err(CreateAccountFromRegistrationCodeError::InvalidRegistrationCode.into());
 	};
 
@@ -476,7 +476,9 @@ pub async fn check_registration_code(
 	registration_code: String,
 	db: Db,
 ) -> Result<Response<Body>, HandlerError<CheckRegistrationCodeError>> {
-	let Some(RegistrationCode { account_kind, .. }) = find_registration_code(&db, &registration_code).await else {
+	let Some(RegistrationCode { account_kind, .. }) =
+		find_registration_code(&db, &registration_code).await
+	else {
 		return Err(CheckRegistrationCodeError::InvalidRegistrationCode.into());
 	};
 

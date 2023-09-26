@@ -38,7 +38,7 @@
 - [x] Display username of currently logged-in user
 - [x] Being able to select whether the registration code should be for an admin or a regular
   account
-- [ ] Check the registration code when loading the registration page
+- [x] Check the registration code when loading the registration page
 - [x] Move infoMsg from upload.js into a reusable component (info_msg_box.mjs)
 - [x] (upload) Display selected files
 - [x] (upload) upload progress

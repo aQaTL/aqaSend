@@ -22,9 +22,31 @@ async function loadUser() {
 	}
 }
 
+async function checkRegistrationCode() {
+	const queryParams = new URLSearchParams(window.location.search);
+	const registrationCode = /**@type {string}*/ queryParams.get("invite");
+	
+	const registrationResult = InfoMsgBox.getById("registrationResult");
+
+	try {
+		const response = await fetch(`${API_SERVER}/api/check_registration_code/${registrationCode}`);
+		
+		if (response.status !== 200) {
+			const responseObj = /**@type {Types.ErrorJsonBody}*/(await response.json());
+			registrationResult.displayFailure(responseObj.message);
+		} else {
+			const responseObj = /**@type {Types.CheckRegistrationCodeResponse}*/(await response.json());
+			registrationResult.displaySuccess(`Account type: ${responseObj.account_kind}`);
+		}
+	} catch (ex) {
+		console.error(ex);
+	}
+}
+
 window.addEventListener("DOMContentLoaded", function(_event) {
 	main();
 	loadUser();
+	checkRegistrationCode();
 });
 
 /**

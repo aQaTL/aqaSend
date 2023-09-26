@@ -2,3 +2,4 @@
 default-members = ["aqa_send"]
 members = ["aqa_send"]
 exclude = ["upload-utils"]
+resolver = "2"

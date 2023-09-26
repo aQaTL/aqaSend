@@ -21,7 +21,7 @@ window.addEventListener("DOMContentLoaded", function(_event) {
 	document.getElementById("generateCodeBtn").addEventListener("click", generateCode);
 });
 
-async function generateCode(event) {
+async function generateCode(/**@type {any}*/event) {
 	event.preventDefault();
 
 	let messageBox = InfoMsgBox.getById("messageBox");

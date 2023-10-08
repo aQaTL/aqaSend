@@ -1,81 +1,96 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-	<meta charset="utf-8" />
-	<title>aQaSend</title>
+    <meta charset="utf-8"/>
+    <title>aQaSend</title>
     <meta name="viewport" content="width=device-width"/>
-	<link rel="icon" href="favicon.png" />
-	<link rel="stylesheet" href="index.css" />
+    <link rel="icon" href="favicon.png"/>
+    <link rel="stylesheet" href="index.css"/>
 </head>
 
 <body>
-	<nav>
-		<div id="greeting">Upload</div>
+<nav>
+    <div id="greeting">Upload</div>
 
-		<a class="menuLink" href="files.html">Files</a>
-		<a class="menuLink" href="my_files.html">My Files</a>
-		<a class="menuLink" href="upload.html">Upload</a>
-		<a class="menuLink" href="log_in.html">Log in</a>
+    <a class="menuLink" href="files.html">Files</a>
+    <a class="menuLink" href="my_files.html">My Files</a>
+    <a class="menuLink" href="upload.html">Upload</a>
+    <a class="menuLink" href="log_in.html">Log in</a>
 
-		<a class="menuLink hidden" href="account.html" id="userInfo"></a>
-	</nav>
+    <a class="menuLink hidden" href="account.html" id="userInfo"></a>
+</nav>
 
-	<main>
-		<info-msg-box id="uploadResult"></info-msg-box>
-		<form id="uploadForm">
-			<section class="uploadFormSection">
-				<label for="visibility-select">Visibility</label>
-				<select name="visibility" id="visibility-select">
-					<option value="public">Public</option>
-					<option value="private">Private</option>
-				</select>
-			</section>
+<main>
+    <info-msg-box id="uploadResult"></info-msg-box>
 
-			<section class="uploadFormSection">
-				<label for="lifetime-select">Lifetime</label>
-				<select name="lifetime" id="lifetime-select">
-					<option value="infinite">Infinite</option>
-					<option value="1 min">1 min</option>
-					<option value="5 mins">5 mins</option>
-					<option value="1 hour">1 hour</option>
-					<option value="1 day" >1 day</option>
-					<option value="7 days">7 days</option>
-					<option value="30 days">30 days</option>
-				</select>
-			</section>
+    <tabs-view id="uploadTypeTabs">
+        <form id="uploadForm">
+            <section class="uploadFormSection">
+                <label for="visibility-select">Visibility</label>
+                <select name="visibility" id="visibility-select">
+                    <option value="public">Public</option>
+                    <option value="private">Private</option>
+                </select>
+            </section>
 
-			<section class="uploadFormSection">
-				<label for="download-count-select">Download count</label>
-				<select name="download-count" id="download-count-select">
-					<option value="infinite">Infinite</option>
-					<option value="1">1</option>
-					<option value="2">2</option>
-					<option value="3">3</option>
-					<option value="4">4</option>
-					<option value="5">5</option>
-					<option value="10">10</option>
-					<option value="100">100</option>
-				</select>
-			</section>
+            <section class="uploadFormSection">
+                <label for="lifetime-select">Lifetime</label>
+                <select name="lifetime" id="lifetime-select">
+                    <option value="infinite">Infinite</option>
+                    <option value="1 min">1 min</option>
+                    <option value="5 mins">5 mins</option>
+                    <option value="1 hour">1 hour</option>
+                    <option value="1 day">1 day</option>
+                    <option value="7 days">7 days</option>
+                    <option value="30 days">30 days</option>
+                </select>
+            </section>
 
-			<section class="uploadFormSection">
-				<label for="password">Password</label>
-				<input type="password" id="password" name="password" />
-			</section>
+            <section class="uploadFormSection">
+                <label for="download-count-select">Download count</label>
+                <select name="download-count" id="download-count-select">
+                    <option value="infinite">Infinite</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="10">10</option>
+                    <option value="100">100</option>
+                </select>
+            </section>
 
-			<section class="uploadFormSection" id="fileUploadFormSection">
-				<div id="fileUploadContainer">
-					<label for="file" class="fileUploadBox" >📂 Select files</label>
-					<input type="file" id="file" name="filename" multiple>
-				</div>
-			</section>
+            <section class="uploadFormSection">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password"/>
+            </section>
 
-			<section class="uploadFormSection">
-				<input type="submit" value="Upload" />
-			</section>
-		</form>
-	</main>
+            <div tab="Text upload" id="text-upload">
+                <section class="uploadFormSection">
+                    <label for="text-filename">File name</label>
+                    <input type="text" id="text-filename" name="text-filename"/>
+                </section>
 
-	<script type="module" src="upload.js"></script>
+                <section class="uploadFormSection">
+                    <textarea id="text-box" placeholder="Type your text here..."></textarea>
+                </section>
+            </div>
+
+            <section tab="File upload" tab-active class="uploadFormSection"
+                     id="fileUploadFormSection">
+                <div id="fileUploadContainer">
+                    <label for="file" class="fileUploadBox">📂 Select files</label>
+                    <input type="file" id="file" name="filename" multiple>
+                </div>
+            </section>
+
+            <section class="uploadFormSection">
+                <input type="submit" value="Upload"/>
+            </section>
+        </form>
+    </tabs-view>
+</main>
+
+<script type="module" src="upload.js"></script>
 </body>
 </html>

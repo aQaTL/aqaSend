@@ -46,7 +46,7 @@
 - [x] (upload) upload progress
 - [ ] Progress spinner and neutral message support for InfoMsgBox 
 - [ ] Turn navigation into a web component
-- [ ] A page or a section on the upload page with a text box to upload text.  
+- [x] A page or a section on the upload page with a text box to upload text.  
 - [ ] Get update's via WebSockets and refresh the list of entries on the fly
 - [ ] Deleting entries
 - [ ] Nicer visual indicator of a private entry

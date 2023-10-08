@@ -79,7 +79,7 @@ nav {
 	text-decoration-color: forestgreen;
 }
 
-input[type=text],input[type=password],input[type=submit],input[type=button],button {
+input[type=text],input[type=password],input[type=submit],input[type=button],button,textarea {
 	color: var(--main-color);
 	background-color: var(--main-bg-secondary-color);
 	border: 1px solid var(--main-bg-color);
@@ -158,7 +158,7 @@ dialog {
 
 /* ===================== Upload ===================== */
 
-#uploadForm {
+#uploadForm, #textUploadForm {
 	display: grid;
 	grid-row-gap: 0.5em;
 	grid-template-columns: 1fr;
@@ -207,6 +207,18 @@ dialog {
 
 .fileUploadBox:hover {
 	background-color: var(--item-bg-color);
+}
+
+#text-box {
+	width: 50em;
+	height: 20em;
+	margin-top: 0.5em;
+}
+
+@media screen and (max-width: 55em) {
+	#text-box {
+		width: 90svw;
+	}
 }
 
 /* ===================== Files ===================== */
@@ -262,6 +274,25 @@ a:visited {
 	justify-items: start;
 	justify-content: start;
 	grid-row-gap: 0.5em;
+}
+
+/* ===================== TabsView ===================== */
+tabs-view {
+	display: grid;
+}
+
+.tabsview-ribbon {
+	display: flex;
+	justify-content: center;
+	gap: 0.5em;
+	margin-bottom: 0.5em;
+}
+
+.tabsview-button {
+}
+
+.tabsview-button-active {
+	border: 1px var(--main-color) solid;
 }
 
 /* ===================== Mobile version ===================== */

@@ -3,7 +3,8 @@
 import * as Types from "./models.mjs";
 import {API_SERVER} from "./api_endpoint.mjs";
 import * as Api from "./api.mjs";
-import InfoMsgBox from "./info_msg_box/info_msg_box.mjs";
+import InfoMsgBox from "./components/info_msg_box.mjs";
+import TabsView from "./components/tabs_view.mjs";
 
 function sayHello() {
 	console.log("Hello world from a custom component");
@@ -54,10 +55,25 @@ function submitUploadForm(event) {
 	/** @type string */
 	const password = submitFormEl["password"].value;
 
-	const fileInputEl = submitFormEl["file"]
+	const tabsView = TabsView.getById("uploadTypeTabs");
+
 	const formData = new FormData();
-	for (let i = 0; i < fileInputEl.files.length; i++) {
-		formData.append("file", fileInputEl.files[i], fileInputEl.files[i].name);
+
+	if (tabsView.activeTab.content.id === "fileUploadFormSection") {
+		const fileInputEl = submitFormEl["file"]
+		for (let i = 0; i < fileInputEl.files.length; i++) {
+			formData.append("file", fileInputEl.files[i], fileInputEl.files[i].name);
+		}
+	} else if (tabsView.activeTab.content.id === "text-upload") {
+		const textInputEl = submitFormEl["text-box"];
+		const fileNameEl = submitFormEl["text-filename"];
+
+		// Encode the text as UTF-8
+		const encoder = new TextEncoder();
+		const view = encoder.encode(textInputEl.value);
+		let blob = new Blob([view], { type: "text/plain" });
+
+		formData.append("file", blob, fileNameEl.value);
 	}
 
 	const request = new XMLHttpRequest();
@@ -108,7 +124,8 @@ function submitUploadForm(event) {
  * @param {FileList} files
  */
 function updateFileList(files) {
-	let fileUploadFormSectionEl = /**@type{HTMLDivElement}*/(document.getElementById("fileUploadFormSection"));;
+	let fileUploadFormSectionEl = /**@type{HTMLDivElement}*/(document.
+		getElementById("fileUploadFormSection"));;
 
 	/**@type{?HTMLElement}*/
 	let fileListSectionEl = null;

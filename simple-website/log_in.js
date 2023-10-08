@@ -3,7 +3,7 @@
 import { API_SERVER } from "./api_endpoint.mjs";
 import * as Api from "./api.mjs";
 import * as Types from "./models.mjs";
-import InfoMsgBox from "./info_msg_box/info_msg_box.mjs";
+import InfoMsgBox from "./components/info_msg_box.mjs";
 
 function main() {
 	let loginFormEl = document.getElementById("loginForm");

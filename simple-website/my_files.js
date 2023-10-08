@@ -2,7 +2,7 @@
 
 import * as Types from "./models.mjs"
 import {API_SERVER} from "./api_endpoint.mjs";
-import PasswordInput from "./password_input_dialog.mjs";
+import PasswordInput from "./components/password_input_dialog.mjs";
 import * as Api from "./api.mjs";
 
 async function loadUser() {

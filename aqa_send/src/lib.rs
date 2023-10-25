@@ -25,6 +25,7 @@ pub mod cli_commands;
 pub mod cookie;
 pub mod db;
 pub mod db_stuff;
+pub mod delete;
 pub mod download;
 pub mod error;
 pub mod files;
@@ -110,6 +111,15 @@ impl Service<Request<Body>> for AqaService {
 			(Method::OPTIONS, ["api", "upload"]) => Box::pin(preflight_request(req)),
 			(Method::GET, ["api", "download", uuid]) => Box::pin(handle_response(
 				download::download(
+					uuid.to_string(),
+					req,
+					self.db.clone(),
+					self.authorized_users.clone(),
+				),
+				origin_header,
+			)),
+			(Method::DELETE, ["api", "delete", uuid]) => Box::pin(handle_response(
+				delete::delete(
 					uuid.to_string(),
 					req,
 					self.db.clone(),

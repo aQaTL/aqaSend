@@ -17,7 +17,7 @@
 - [x] Admin and normal user registration code types
 - [ ] Delete invite code after 1 use 
 - [ ] Websocket API
-- [ ] Deleting entries
+- [x] Deleting entries
 
 ## Error handling
 

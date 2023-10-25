@@ -902,9 +902,18 @@ Content-Disposition: form-data; name=\"password\"\r\n\r\n\
 		.unwrap();
 	let (_, session_cookie) = cookie::parse_set_cookie(session_cookie).unwrap();
 
+	debug!("checking that you cannot create a registration code without logging in");
+	let request = Request::builder()
+		.uri("/api/registration_code/user")
+		.method(Method::GET)
+		.body(Body::empty())?;
+
+	let response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
 	debug!("creating registration code");
 	let request = Request::builder()
-		.uri("/api/registration_code")
+		.uri("/api/registration_code/user")
 		.header(
 			"Cookie",
 			format!("{}={}", session_cookie.name, session_cookie.value),
@@ -975,6 +984,757 @@ Content-Disposition: form-data; name=\"registration_code\"\r\n\r\n\
 	let whoami = std::str::from_utf8(&response_body)?;
 
 	assert_eq!(whoami, "Ola");
+
+	Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn user_can_delete_own_file() -> Result<()> {
+	let mut test_server = TestServer::new()?;
+	test_server.start_cleanup_task(Duration::from_millis(10));
+
+	let username = String::from("Ala");
+	let password = String::from("makota");
+
+	let account_uuid = create_account(
+		test_server.db_handle.clone(),
+		username.clone(),
+		AccountType::User,
+		Zeroizing::new(password.clone()),
+	)
+	.await?;
+
+	debug!("Created account with uuid {account_uuid}");
+
+	let boundary = random_string(50);
+
+	let request = Request::builder()
+		.uri("/api/login")
+		.method(Method::POST)
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"username\"\r\n\r\n\
+{username}\r\n\
+--{boundary}--\r\n\
+Content-Disposition: form-data; name=\"password\"\r\n\r\n\
+{password}\r\n\
+--{boundary}--\r\n"
+		)))?;
+
+	let response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::CREATED);
+
+	let cookie = response
+		.headers()
+		.get(SET_COOKIE)
+		.expect("Set-Cookie missing")
+		.to_str()
+		.unwrap();
+	let (_, cookie) = cookie::parse_set_cookie(cookie).unwrap();
+
+	debug!("Logged in with session cookie: {cookie:?}");
+
+	let cookie_header_value = format!("{}={}", cookie.name, cookie.value);
+	debug!("Cookie header: {cookie_header_value}");
+
+	let file_contents = random_string(143);
+	let boundary = random_string(50);
+
+	const DOWNLOAD_COUNT: &str = "1";
+
+	let request = Request::builder()
+		.uri("/api/upload")
+		.method(Method::POST)
+		.header("Cookie", cookie_header_value.clone())
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.header(headers::DOWNLOAD_COUNT, DOWNLOAD_COUNT)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"sample_file\"; filename=\"sample_file\"\r\n\
+Content-Type: text/plain\r\n\r\n\
+{}\r\n\
+--{boundary}--\r\n",
+			file_contents
+		)))?;
+
+	let mut response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::OK);
+
+	let response_bytes = to_bytes(response.body_mut()).await?;
+	let UploadResponse(uploaded_files) = serde_json::from_slice(&response_bytes)?;
+
+	assert_eq!(uploaded_files[0].filename, "sample_file");
+
+	let uploaded_file_path = test_server
+		.db_dir
+		.path()
+		.join(DB_DIR)
+		.join(DOWNLOAD_COUNT)
+		.join(uploaded_files[0].uuid.to_string());
+
+	assert!(uploaded_file_path.exists());
+
+	let request = Request::builder()
+		.uri(format!("/api/delete/{}", uploaded_files[0].uuid))
+		.method(Method::DELETE)
+		.header("Cookie", cookie_header_value.clone())
+		.body(Body::empty())?;
+	let response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+	tokio::time::sleep(Duration::from_millis(20)).await;
+
+	let request = Request::builder()
+		.uri(format!("/api/download/{}", uploaded_files[0].uuid))
+		.method(Method::GET)
+		.body(Body::empty())?;
+
+	let response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+	assert!(!uploaded_file_path.exists());
+
+	Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn user_cannot_delete_public_files() -> Result<()> {
+	let mut test_server = TestServer::new()?;
+	test_server.start_cleanup_task(Duration::from_millis(10));
+
+	let file_contents = random_string(143);
+	let boundary = random_string(50);
+
+	const DOWNLOAD_COUNT: &str = "1";
+
+	let request = Request::builder()
+		.uri("/api/upload")
+		.method(Method::POST)
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.header(headers::DOWNLOAD_COUNT, DOWNLOAD_COUNT)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"sample_file\"; filename=\"sample_file\"\r\n\
+Content-Type: text/plain\r\n\r\n\
+{}\r\n\
+--{boundary}--\r\n",
+			file_contents
+		)))?;
+
+	let mut response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::OK);
+
+	let response_bytes = to_bytes(response.body_mut()).await?;
+	let UploadResponse(uploaded_files) = serde_json::from_slice(&response_bytes)?;
+
+	assert_eq!(uploaded_files[0].filename, "sample_file");
+
+	let uploaded_file_path = test_server
+		.db_dir
+		.path()
+		.join(DB_DIR)
+		.join(DOWNLOAD_COUNT)
+		.join(uploaded_files[0].uuid.to_string());
+
+	assert!(uploaded_file_path.exists());
+
+	let username = String::from("Ala");
+	let password = String::from("makota");
+
+	let account_uuid = create_account(
+		test_server.db_handle.clone(),
+		username.clone(),
+		AccountType::User,
+		Zeroizing::new(password.clone()),
+	)
+	.await?;
+
+	debug!("Created account with uuid {account_uuid}");
+
+	let boundary = random_string(50);
+
+	let request = Request::builder()
+		.uri("/api/login")
+		.method(Method::POST)
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"username\"\r\n\r\n\
+{username}\r\n\
+--{boundary}--\r\n\
+Content-Disposition: form-data; name=\"password\"\r\n\r\n\
+{password}\r\n\
+--{boundary}--\r\n"
+		)))?;
+
+	let response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::CREATED);
+
+	let cookie = response
+		.headers()
+		.get(SET_COOKIE)
+		.expect("Set-Cookie missing")
+		.to_str()
+		.unwrap();
+	let (_, cookie) = cookie::parse_set_cookie(cookie).unwrap();
+
+	debug!("Logged in with session cookie: {cookie:?}");
+
+	let cookie_header_value = format!("{}={}", cookie.name, cookie.value);
+	debug!("Cookie header: {cookie_header_value}");
+
+	let request = Request::builder()
+		.uri(format!("/api/delete/{}", uploaded_files[0].uuid))
+		.method(Method::DELETE)
+		.header("Cookie", cookie_header_value.clone())
+		.body(Body::empty())?;
+	let mut response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+	let response_bytes = to_bytes(response.body_mut()).await?;
+	let error: serde_json::Value = serde_json::from_slice(&response_bytes)?;
+	assert_eq!(
+		error["message"],
+		aqa_send::delete::DeleteError::NotAuthorized.to_string()
+	);
+
+	Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn user_cannot_delete_someones_file() -> Result<()> {
+	let mut test_server = TestServer::new()?;
+	test_server.start_cleanup_task(Duration::from_millis(10));
+
+	let ala_username = String::from("Ala");
+	let ala_password = String::from("makota");
+
+	let ala_user_uuid = create_account(
+		test_server.db_handle.clone(),
+		ala_username.clone(),
+		AccountType::User,
+		Zeroizing::new(ala_password.clone()),
+	)
+	.await?;
+	debug!("Created account with uuid {ala_user_uuid}");
+
+	let ola_username = String::from("Ola");
+	let ola_password = String::from("mapsa");
+
+	let ola_user_uuid = create_account(
+		test_server.db_handle.clone(),
+		ola_username.clone(),
+		AccountType::User,
+		Zeroizing::new(ola_password.clone()),
+	)
+	.await?;
+	debug!("Created account with uuid {ola_user_uuid}");
+
+	let ela_username = String::from("Ela");
+	let ela_password = String::from("mapsa");
+
+	let ela_user_uuid = create_account(
+		test_server.db_handle.clone(),
+		ela_username.clone(),
+		AccountType::Admin,
+		Zeroizing::new(ela_password.clone()),
+	)
+	.await?;
+	debug!("Created account with uuid {ela_user_uuid}");
+
+	let boundary = random_string(50);
+	let request = Request::builder()
+		.uri("/api/login")
+		.method(Method::POST)
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"username\"\r\n\r\n\
+{ala_username}\r\n\
+--{boundary}--\r\n\
+Content-Disposition: form-data; name=\"password\"\r\n\r\n\
+{ala_password}\r\n\
+--{boundary}--\r\n"
+		)))?;
+	let response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::CREATED);
+	let cookie = response
+		.headers()
+		.get(SET_COOKIE)
+		.expect("Set-Cookie missing")
+		.to_str()
+		.unwrap();
+	let (_, cookie) = cookie::parse_set_cookie(cookie).unwrap();
+	debug!("Logged in with session cookie: {cookie:?}");
+	let ala_cookie_header_value = format!("{}={}", cookie.name, cookie.value);
+	debug!("Cookie header: {ala_cookie_header_value}");
+
+	let boundary = random_string(50);
+	let request = Request::builder()
+		.uri("/api/login")
+		.method(Method::POST)
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"username\"\r\n\r\n\
+{ola_username}\r\n\
+--{boundary}--\r\n\
+Content-Disposition: form-data; name=\"password\"\r\n\r\n\
+{ola_password}\r\n\
+--{boundary}--\r\n"
+		)))?;
+	let response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::CREATED);
+	let cookie = response
+		.headers()
+		.get(SET_COOKIE)
+		.expect("Set-Cookie missing")
+		.to_str()
+		.unwrap();
+	let (_, cookie) = cookie::parse_set_cookie(cookie).unwrap();
+	debug!("Logged in with session cookie: {cookie:?}");
+	let ola_cookie_header_value = format!("{}={}", cookie.name, cookie.value);
+	debug!("Cookie header: {ola_cookie_header_value}");
+
+	let boundary = random_string(50);
+	let request = Request::builder()
+		.uri("/api/login")
+		.method(Method::POST)
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"username\"\r\n\r\n\
+{ela_username}\r\n\
+--{boundary}--\r\n\
+Content-Disposition: form-data; name=\"password\"\r\n\r\n\
+{ela_password}\r\n\
+--{boundary}--\r\n"
+		)))?;
+	let response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::CREATED);
+	let cookie = response
+		.headers()
+		.get(SET_COOKIE)
+		.expect("Set-Cookie missing")
+		.to_str()
+		.unwrap();
+	let (_, cookie) = cookie::parse_set_cookie(cookie).unwrap();
+	debug!("Logged in with session cookie: {cookie:?}");
+	let ela_cookie_header_value = format!("{}={}", cookie.name, cookie.value);
+	debug!("Cookie header: {ela_cookie_header_value}");
+
+	const DOWNLOAD_COUNT: &str = "1";
+
+	let file_contents = random_string(143);
+	let boundary = random_string(50);
+	let request = Request::builder()
+		.uri("/api/upload")
+		.method(Method::POST)
+		.header("Cookie", ola_cookie_header_value.clone())
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.header(headers::DOWNLOAD_COUNT, DOWNLOAD_COUNT)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"sample_file\"; filename=\"sample_file\"\r\n\
+Content-Type: text/plain\r\n\r\n\
+{}\r\n\
+--{boundary}--\r\n",
+			file_contents
+		)))?;
+
+	let mut response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::OK);
+
+	let UploadResponse(uploaded_files) =
+		serde_json::from_slice(&to_bytes(response.body_mut()).await?)?;
+	let ola_file_uuid = uploaded_files[0].uuid;
+
+	let file_contents = random_string(143);
+	let boundary = random_string(50);
+	let request = Request::builder()
+		.uri("/api/upload")
+		.method(Method::POST)
+		.header("Cookie", ela_cookie_header_value.clone())
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.header(headers::DOWNLOAD_COUNT, DOWNLOAD_COUNT)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"sample_file\"; filename=\"sample_file\"\r\n\
+Content-Type: text/plain\r\n\r\n\
+{}\r\n\
+--{boundary}--\r\n",
+			file_contents
+		)))?;
+
+	let mut response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::OK);
+
+	let UploadResponse(uploaded_files) =
+		serde_json::from_slice(&to_bytes(response.body_mut()).await?)?;
+	let ela_file_uuid = uploaded_files[0].uuid;
+
+	let request = Request::builder()
+		.uri(format!("/api/delete/{}", ola_file_uuid))
+		.method(Method::DELETE)
+		.header("Cookie", ala_cookie_header_value.clone())
+		.body(Body::empty())?;
+	let mut response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+	let error: serde_json::Value = serde_json::from_slice(&to_bytes(response.body_mut()).await?)?;
+	assert_eq!(
+		error["message"],
+		aqa_send::delete::DeleteError::NotAuthorized.to_string()
+	);
+
+	let request = Request::builder()
+		.uri(format!("/api/delete/{}", ela_file_uuid))
+		.method(Method::DELETE)
+		.header("Cookie", ala_cookie_header_value.clone())
+		.body(Body::empty())?;
+	let mut response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+	let error: serde_json::Value = serde_json::from_slice(&to_bytes(response.body_mut()).await?)?;
+	assert_eq!(
+		error["message"],
+		aqa_send::delete::DeleteError::NotAuthorized.to_string()
+	);
+
+	Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn admin_can_delete_public_files() -> Result<()> {
+	let mut test_server = TestServer::new()?;
+	test_server.start_cleanup_task(Duration::from_millis(10));
+
+	let file_contents = random_string(143);
+	let boundary = random_string(50);
+
+	const DOWNLOAD_COUNT: &str = "1";
+
+	let request = Request::builder()
+		.uri("/api/upload")
+		.method(Method::POST)
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.header(headers::DOWNLOAD_COUNT, DOWNLOAD_COUNT)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"sample_file\"; filename=\"sample_file\"\r\n\
+Content-Type: text/plain\r\n\r\n\
+{}\r\n\
+--{boundary}--\r\n",
+			file_contents
+		)))?;
+
+	let mut response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::OK);
+
+	let response_bytes = to_bytes(response.body_mut()).await?;
+	let UploadResponse(uploaded_files) = serde_json::from_slice(&response_bytes)?;
+
+	assert_eq!(uploaded_files[0].filename, "sample_file");
+
+	let uploaded_file_path = test_server
+		.db_dir
+		.path()
+		.join(DB_DIR)
+		.join(DOWNLOAD_COUNT)
+		.join(uploaded_files[0].uuid.to_string());
+
+	assert!(uploaded_file_path.exists());
+
+	let username = String::from("Ala");
+	let password = String::from("makota");
+
+	let account_uuid = create_account(
+		test_server.db_handle.clone(),
+		username.clone(),
+		AccountType::Admin,
+		Zeroizing::new(password.clone()),
+	)
+	.await?;
+
+	debug!("Created account with uuid {account_uuid}");
+
+	let boundary = random_string(50);
+
+	let request = Request::builder()
+		.uri("/api/login")
+		.method(Method::POST)
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"username\"\r\n\r\n\
+{username}\r\n\
+--{boundary}--\r\n\
+Content-Disposition: form-data; name=\"password\"\r\n\r\n\
+{password}\r\n\
+--{boundary}--\r\n"
+		)))?;
+
+	let response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::CREATED);
+
+	let cookie = response
+		.headers()
+		.get(SET_COOKIE)
+		.expect("Set-Cookie missing")
+		.to_str()
+		.unwrap();
+	let (_, cookie) = cookie::parse_set_cookie(cookie).unwrap();
+
+	debug!("Logged in with session cookie: {cookie:?}");
+
+	let cookie_header_value = format!("{}={}", cookie.name, cookie.value);
+	debug!("Cookie header: {cookie_header_value}");
+
+	let request = Request::builder()
+		.uri(format!("/api/delete/{}", uploaded_files[0].uuid))
+		.method(Method::DELETE)
+		.header("Cookie", cookie_header_value.clone())
+		.body(Body::empty())?;
+	let response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+	Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn admin_can_delete_someones_file() -> Result<()> {
+	let mut test_server = TestServer::new()?;
+	test_server.start_cleanup_task(Duration::from_millis(10));
+
+	let ala_username = String::from("Ala");
+	let ala_password = String::from("makota");
+
+	let ala_user_uuid = create_account(
+		test_server.db_handle.clone(),
+		ala_username.clone(),
+		AccountType::Admin,
+		Zeroizing::new(ala_password.clone()),
+	)
+	.await?;
+	debug!("Created account with uuid {ala_user_uuid}");
+
+	let ola_username = String::from("Ola");
+	let ola_password = String::from("mapsa");
+
+	let ola_user_uuid = create_account(
+		test_server.db_handle.clone(),
+		ola_username.clone(),
+		AccountType::User,
+		Zeroizing::new(ola_password.clone()),
+	)
+	.await?;
+	debug!("Created account with uuid {ola_user_uuid}");
+
+	let ela_username = String::from("Ela");
+	let ela_password = String::from("mapsa");
+
+	let ela_user_uuid = create_account(
+		test_server.db_handle.clone(),
+		ela_username.clone(),
+		AccountType::Admin,
+		Zeroizing::new(ela_password.clone()),
+	)
+	.await?;
+	debug!("Created account with uuid {ela_user_uuid}");
+
+	let boundary = random_string(50);
+	let request = Request::builder()
+		.uri("/api/login")
+		.method(Method::POST)
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"username\"\r\n\r\n\
+{ala_username}\r\n\
+--{boundary}--\r\n\
+Content-Disposition: form-data; name=\"password\"\r\n\r\n\
+{ala_password}\r\n\
+--{boundary}--\r\n"
+		)))?;
+	let response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::CREATED);
+	let cookie = response
+		.headers()
+		.get(SET_COOKIE)
+		.expect("Set-Cookie missing")
+		.to_str()
+		.unwrap();
+	let (_, cookie) = cookie::parse_set_cookie(cookie).unwrap();
+	debug!("Logged in with session cookie: {cookie:?}");
+	let ala_cookie_header_value = format!("{}={}", cookie.name, cookie.value);
+	debug!("Cookie header: {ala_cookie_header_value}");
+
+	let boundary = random_string(50);
+	let request = Request::builder()
+		.uri("/api/login")
+		.method(Method::POST)
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"username\"\r\n\r\n\
+{ola_username}\r\n\
+--{boundary}--\r\n\
+Content-Disposition: form-data; name=\"password\"\r\n\r\n\
+{ola_password}\r\n\
+--{boundary}--\r\n"
+		)))?;
+	let response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::CREATED);
+	let cookie = response
+		.headers()
+		.get(SET_COOKIE)
+		.expect("Set-Cookie missing")
+		.to_str()
+		.unwrap();
+	let (_, cookie) = cookie::parse_set_cookie(cookie).unwrap();
+	debug!("Logged in with session cookie: {cookie:?}");
+	let ola_cookie_header_value = format!("{}={}", cookie.name, cookie.value);
+	debug!("Cookie header: {ola_cookie_header_value}");
+
+	let boundary = random_string(50);
+	let request = Request::builder()
+		.uri("/api/login")
+		.method(Method::POST)
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"username\"\r\n\r\n\
+{ela_username}\r\n\
+--{boundary}--\r\n\
+Content-Disposition: form-data; name=\"password\"\r\n\r\n\
+{ela_password}\r\n\
+--{boundary}--\r\n"
+		)))?;
+	let response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::CREATED);
+	let cookie = response
+		.headers()
+		.get(SET_COOKIE)
+		.expect("Set-Cookie missing")
+		.to_str()
+		.unwrap();
+	let (_, cookie) = cookie::parse_set_cookie(cookie).unwrap();
+	debug!("Logged in with session cookie: {cookie:?}");
+	let ela_cookie_header_value = format!("{}={}", cookie.name, cookie.value);
+	debug!("Cookie header: {ela_cookie_header_value}");
+
+	const DOWNLOAD_COUNT: &str = "1";
+
+	let file_contents = random_string(143);
+	let boundary = random_string(50);
+	let request = Request::builder()
+		.uri("/api/upload")
+		.method(Method::POST)
+		.header("Cookie", ola_cookie_header_value.clone())
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.header(headers::DOWNLOAD_COUNT, DOWNLOAD_COUNT)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"sample_file\"; filename=\"sample_file\"\r\n\
+Content-Type: text/plain\r\n\r\n\
+{}\r\n\
+--{boundary}--\r\n",
+			file_contents
+		)))?;
+
+	let mut response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::OK);
+
+	let UploadResponse(uploaded_files) =
+		serde_json::from_slice(&to_bytes(response.body_mut()).await?)?;
+	let ola_file_uuid = uploaded_files[0].uuid;
+
+	let file_contents = random_string(143);
+	let boundary = random_string(50);
+	let request = Request::builder()
+		.uri("/api/upload")
+		.method(Method::POST)
+		.header("Cookie", ela_cookie_header_value.clone())
+		.header(
+			"Content-Type",
+			format!("multipart/form-data; boundary={boundary}"),
+		)
+		.header(headers::DOWNLOAD_COUNT, DOWNLOAD_COUNT)
+		.body(Body::from(format!(
+			"--{boundary}\r\n\
+Content-Disposition: form-data; name=\"sample_file\"; filename=\"sample_file\"\r\n\
+Content-Type: text/plain\r\n\r\n\
+{}\r\n\
+--{boundary}--\r\n",
+			file_contents
+		)))?;
+
+	let mut response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::OK);
+
+	let UploadResponse(uploaded_files) =
+		serde_json::from_slice(&to_bytes(response.body_mut()).await?)?;
+	let ela_file_uuid = uploaded_files[0].uuid;
+
+	let request = Request::builder()
+		.uri(format!("/api/delete/{}", ola_file_uuid))
+		.method(Method::DELETE)
+		.header("Cookie", ala_cookie_header_value.clone())
+		.body(Body::empty())?;
+	let response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+	let request = Request::builder()
+		.uri(format!("/api/delete/{}", ela_file_uuid))
+		.method(Method::DELETE)
+		.header("Cookie", ala_cookie_header_value.clone())
+		.body(Body::empty())?;
+	let response = test_server.process_request(request).await?;
+	assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
 	Ok(())
 }

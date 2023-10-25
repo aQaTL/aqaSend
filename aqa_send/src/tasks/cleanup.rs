@@ -25,8 +25,8 @@ pub async fn cleanup_task(db: Db, cleanup_interval: Duration, start_lag: Duratio
 		for (uuid, file_entry) in writer_lock.iter_mut() {
 			if let DownloadCount::Count(max_count) = file_entry.download_count_type {
 				if file_entry.download_count >= max_count {
+					db_entries_to_delete.push(*uuid);
 					remove_file(
-						&mut db_entries_to_delete,
 						file_entry,
 						uuid,
 						&mut deleted_files_count,
@@ -40,8 +40,8 @@ pub async fn cleanup_task(db: Db, cleanup_interval: Duration, start_lag: Duratio
 			if let Lifetime::Duration(lifetime) = file_entry.lifetime {
 				if let Ok(elapsed) = file_entry.upload_date.elapsed() {
 					if elapsed > lifetime {
+						db_entries_to_delete.push(*uuid);
 						remove_file(
-							&mut db_entries_to_delete,
 							file_entry,
 							uuid,
 							&mut deleted_files_count,
@@ -63,15 +63,12 @@ pub async fn cleanup_task(db: Db, cleanup_interval: Duration, start_lag: Duratio
 	}
 }
 
-async fn remove_file(
-	db_entries_to_delete: &mut Vec<Uuid>,
-	file_entry: &mut FileEntry,
+pub async fn remove_file(
+	file_entry: &FileEntry,
 	uuid: &Uuid,
 	deleted_files_count: &mut u64,
 	db_path: &Path,
 ) {
-	db_entries_to_delete.push(*uuid);
-
 	let mut file_path = db_path.to_owned();
 	file_path.push(file_entry.download_count_type.to_string());
 	file_path.push(uuid.to_string());

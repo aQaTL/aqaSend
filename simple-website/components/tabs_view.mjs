@@ -1,6 +1,7 @@
 const BUTTON_CLASS = "tabsview-button";
 const ACTIVE_BUTTON_CLASS = "tabsview-button-active";
 const RIBBON_CLASS = "tabsview-ribbon";
+const HIDDEN_CLASS = "tabsview-hidden";
 
 const TAB_ATTRIBUTE = "tab";
 const ACTIVE_TAB_ATTRIBUTE = "tab-active";
@@ -52,7 +53,7 @@ export default class TabsView extends HTMLElement {
 		const tabs = document.createElement("div");
 
 		const style = document.createElement("style");
-		style.innerHTML = ".hidden { display: none !important; }";
+		style.innerHTML = `.${HIDDEN_CLASS} { display: none !important; }`;
 		tabs.appendChild(style);
 
 		const tabsRibbon = document.createElement("div");
@@ -83,7 +84,7 @@ export default class TabsView extends HTMLElement {
 				button.classList.add(ACTIVE_BUTTON_CLASS);
 				this.activeTab = tabButtonAndContent;
 			} else {
-				child.classList.add("hidden");
+				child.classList.add(HIDDEN_CLASS);
 			}
 
 			this.#tabContents.set(tabName, tabButtonAndContent);
@@ -101,11 +102,11 @@ export default class TabsView extends HTMLElement {
 	 */
 	openTab(tabName) {
 		for (const [_tabName, tab] of this.#tabContents) {
-			tab.content.classList.add("hidden")
+			tab.content.classList.add(HIDDEN_CLASS)
 			tab.button.classList.remove(ACTIVE_BUTTON_CLASS)
 		}
 		const activeTab = this.#tabContents.get(tabName);
-		activeTab.content.classList.remove("hidden");
+		activeTab.content.classList.remove(HIDDEN_CLASS);
 		activeTab.button.classList.add(ACTIVE_BUTTON_CLASS);
 		this.activeTab = activeTab;
 	}

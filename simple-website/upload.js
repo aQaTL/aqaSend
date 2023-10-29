@@ -6,10 +6,6 @@ import * as Api from "./api.mjs";
 import InfoMsgBox from "./components/info_msg_box.mjs";
 import TabsView from "./components/tabs_view.mjs";
 
-function sayHello() {
-	console.log("Hello world from a custom component");
-}
-
 function main() {
 	let uploadFormEl = document.getElementById("uploadForm");
 	uploadFormEl.addEventListener("submit", submitUploadForm);

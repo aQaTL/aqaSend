@@ -9,6 +9,7 @@
 	--main-bg-secondary-color: #313b53;
 	--main-bg-lighter-color: #393d46;
 	--item-bg-color: #1b202d;
+	--item-bg-lighter-color: #393d46;
 	--success-color: #3b5c3d;
 	--failure-color: #5c3d3b;
 }
@@ -225,27 +226,39 @@ dialog {
 
 #fileEntries {
 	display: grid;
-	grid-row-gap: 0.5em;
 }
 
 .fileEntry {
-	
+	padding: 0.25em;
 }
 
 .fileEntry:hover {
-	background-color: var(--item-bg-color);
+	background-color: var(--item-bg-lighter-color);
+	border-radius: 5px;
 	cursor: pointer;
 }
 
 .fileEntry a {
 	color: var(--main-color);
 	text-decoration: none;
+
+	display: grid;
+	grid: "filename deleteButton" auto
+		  "rest rest" 1fr
+		/ 1fr 4em;
+}
+
+.fileEntryStats {
+	grid-area: rest;
+	padding-bottom: 0.5em;
 }
 
 .fileEntryFilename {
 	font-size: 16pt;
 	color: var(--main-color);
 	font-weight: bold;
+
+	align-self: center;
 }
 
 .fileEntry div {
@@ -258,6 +271,10 @@ a:visited {
 
 .fileEntryPrivate {
 	border: 2px solid gold;
+}
+
+.deleteButton {
+	margin-left: 0.5em;
 }
 
 /* ===================== Account ===================== */
@@ -305,7 +322,7 @@ tabs-view {
 	}
 
 	.fileEntry {
-		overflow: clip;
+		overflow: scroll;
 		word-wrap: break-word;
 		white-space: initial;
 	}

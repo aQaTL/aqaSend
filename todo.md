@@ -50,3 +50,4 @@
 - [ ] Get update's via WebSockets and refresh the list of entries on the fly
 - [x] Deleting entries
 - [ ] Nicer visual indicator of a private entry
+- [ ] Link item type that will just go to the page instead of opening a text file with the link

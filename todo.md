@@ -51,3 +51,4 @@
 - [x] Deleting entries
 - [ ] Nicer visual indicator of a private entry
 - [ ] Link item type that will just go to the page instead of opening a text file with the link
+- [ ] Code editor for the text input upload (https://ace.c9.io/ is what rust playground uses)

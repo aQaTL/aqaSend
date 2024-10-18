@@ -18,6 +18,9 @@
 - [ ] Delete invite code after 1 use 
 - [ ] Websocket API
 - [x] Deleting entries
+- [ ] Upload size limit enforced at server level
+    - [ ] 500MB or 1GB for unregistered
+    - [ ] 20 GB for registered
 
 ## Error handling
 

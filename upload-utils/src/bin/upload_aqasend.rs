@@ -30,7 +30,7 @@ fn upload_aqasend() -> Result<(), Box<dyn StdError>> {
 			"/bin/bash",
 			"-l",
 			"-c",
-			"cd ~/dev/rust/aqaSend; git pull windows main; cargo build --release",
+			"cd ~/dev/rust_old/aqaSend; git pull windows main; cargo build --release",
 		])
 		.spawn()?
 		.wait()?;
@@ -59,7 +59,7 @@ systemctl status aqasend.service
 }
 
 fn upload_website() -> Result<(), Box<dyn StdError>> {
-	let cmd = "cd ~/dev/rust/aqaSend; \
+	let cmd = "cd ~/dev/rust_old/aqaSend; \
         git pull windows main; \
         rsync \
             --delete \
